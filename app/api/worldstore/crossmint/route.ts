@@ -1,0 +1,166 @@
+import { NextResponse } from 'next/server';
+import https from 'https';
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    console.log('Crossmint API - Request body:', JSON.stringify(body, null, 2));
+
+    const { title, price, thumbnail, asin, email, shippingAddress, walletAddress } = body;
+
+    if (!title || !price || !asin || !email || !shippingAddress || !walletAddress) {
+      return NextResponse.json(
+        { error: 'Missing required parameters' },
+        { status: 400 }
+      );
+    }
+
+    const API_KEY = process.env.CROSSMINT_API_KEY;
+    if (!API_KEY) {
+      console.error('Crossmint API - API key not configured');
+      return NextResponse.json(
+        { error: 'API key not configured' },
+        { status: 500 }
+      );
+    }
+
+    // Create a custom agent that ignores SSL certificate validation in development
+    const agent = new https.Agent({
+      rejectUnauthorized: process.env.NODE_ENV === 'production'
+    });
+
+    // First, search for the product in Crossmint
+    const searchResponse = await fetch('https://staging.crossmint.com/api/v1-alpha1/ws/search', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        searchParameters: {
+          "standard.marketplace.amazon.asin": asin
+        },
+        categories: ["*"],
+        keywords: [""]
+      }),
+      // @ts-ignore - agent is valid but TypeScript doesn't recognize it
+      agent
+    });
+
+    console.log('Crossmint Search API - Response status:', searchResponse.status);
+    const searchData = await searchResponse.json();
+    console.log('Crossmint Search API - Response:', JSON.stringify(searchData, null, 2));
+
+    if (!searchResponse.ok) {
+      return NextResponse.json(
+        { error: searchData.message || 'Failed to search product' },
+        { status: searchResponse.status }
+      );
+    }
+
+    // Check if we found any products
+    if (!searchData || !Array.isArray(searchData) || searchData.length === 0) {
+      return NextResponse.json(
+        { error: 'Item is not available for sale' },
+        { status: 404 }
+      );
+    }
+
+    const listing = searchData[0].listing;
+    console.log('Found listing:', JSON.stringify(listing, null, 2));
+
+    // Create WorldStore order
+    const orderResponse = await fetch('https://staging.crossmint.com/api/v1-alpha1/ws/orders', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        sellerId: searchData[0].sellerId,
+        items: [
+          {
+            listingId: listing.id,
+            listingParameters: {}
+          }
+        ],
+        orderParameters: {
+          shippingAddress: {
+            name: shippingAddress.name,
+            address1: shippingAddress.address1,
+            address2: shippingAddress.address2 || "",
+            city: shippingAddress.city,
+            province: shippingAddress.province,
+            postalCode: shippingAddress.postalCode,
+            country: shippingAddress.country
+          }
+        }
+      }),
+      // @ts-ignore - agent is valid but TypeScript doesn't recognize it
+      agent
+    });
+
+    console.log('WorldStore Order API - Response status:', orderResponse.status);
+    const orderData = await orderResponse.json();
+    console.log('WorldStore Order API - Response:', JSON.stringify(orderData, null, 2));
+
+    if (!orderResponse.ok) {
+      return NextResponse.json(
+        { error: orderData.message || 'Failed to create order' },
+        { status: orderResponse.status }
+      );
+    }
+
+    // Send to Crossmint headless checkout
+    const checkoutResponse = await fetch('https://staging.crossmint.com/api/2022-06-09/orders', {
+      method: 'POST',
+      headers: {
+        'X-API-KEY': API_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        recipient: {
+          email: email,
+          physicalAddress: {
+            name: shippingAddress.name,
+            line1: shippingAddress.address1,
+            line2: shippingAddress.address2 || "",
+            city: shippingAddress.city,
+            postalCode: shippingAddress.postalCode,
+            country: shippingAddress.country,
+            state: shippingAddress.province
+          }
+        },
+        locale: "en-US",
+        payment: {
+          receiptEmail: email,
+          method: "ethereum-sepolia",
+          currency: "credit",
+          payerAddress: walletAddress
+        },
+        externalOrder: orderData
+      }),
+      // @ts-ignore - agent is valid but TypeScript doesn't recognize it
+      agent
+    });
+
+    console.log('Crossmint Checkout API - Response status:', checkoutResponse.status);
+    const checkoutData = await checkoutResponse.json();
+    console.log('Crossmint Checkout API - Response:', JSON.stringify(checkoutData, null, 2));
+
+    if (!checkoutResponse.ok) {
+      return NextResponse.json(
+        { error: checkoutData.message || 'Failed to create checkout session' },
+        { status: checkoutResponse.status }
+      );
+    }
+
+    return NextResponse.json(checkoutData);
+  } catch (error) {
+    console.error('Crossmint API - Error:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+} 
