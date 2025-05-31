@@ -63,10 +63,12 @@ export default function ProductPage() {
         setProduct(data.product);
         
         // Set up images array
-        const images = [
-          data.product.main_image,
-          ...(data.product.images || []).map((img: any) => img.link || img.url)
-        ].filter(Boolean);
+        const mainImage = data.product.main_image;
+        const additionalImages = (data.product.images || [])
+          .map((img: any) => img.link || img.url)
+          .filter((url: string) => url !== mainImage); // Filter out the main image if it exists in additional images
+        
+        const images = [mainImage, ...additionalImages].filter(Boolean);
         
         console.log('Product images:', images);
         setAllImages(images);
@@ -237,6 +239,17 @@ export default function ProductPage() {
                     {typeof (selectedVariant?.original_price || product.original_price) === 'string' 
                       ? (selectedVariant?.original_price || product.original_price) 
                       : `$${selectedVariant?.original_price || product.original_price}`}
+                  </p>
+                )}
+
+                {/* Add availability status */}
+                {product.availability && (
+                  <p className={`text-sm font-medium mt-2 ${
+                    product.availability.toLowerCase().includes('in stock') 
+                      ? 'text-green-600' 
+                      : 'text-red-600'
+                  }`}>
+                    {product.availability}
                   </p>
                 )}
 
