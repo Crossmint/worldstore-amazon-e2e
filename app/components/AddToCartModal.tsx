@@ -374,105 +374,113 @@ export default function AddToCartModal({ isOpen, onClose, product }: AddToCartMo
             </div>
 
             <div className="space-y-4">
-              <WalletConnect />
-
-              <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                  Email
-                </label>
-                <input
-                  type="email"
-                  id="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                  placeholder="your@email.com"
-                />
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <h4 className="font-medium text-gray-900 mb-2">Connect Wallet</h4>
+                <p className="text-sm text-gray-600 mb-4">Connect your wallet to proceed with checkout</p>
+                <WalletConnect />
               </div>
 
-              <div className="space-y-4">
-                <h4 className="font-medium text-gray-900">Shipping Address</h4>
-                
-                <div>
-                  <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-                    Full Name
-                  </label>
-                  <input
-                    type="text"
-                    id="name"
-                    value={shippingAddress.name}
-                    onChange={(e) => setShippingAddress(prev => ({ ...prev, name: e.target.value }))}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="address1" className="block text-sm font-medium text-gray-700">
-                    Address Line 1
-                  </label>
-                  <input
-                    type="text"
-                    id="address1"
-                    value={shippingAddress.address1}
-                    onChange={(e) => setShippingAddress(prev => ({ ...prev, address1: e.target.value }))}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="address2" className="block text-sm font-medium text-gray-700">
-                    Address Line 2 (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    id="address2"
-                    value={shippingAddress.address2}
-                    onChange={(e) => setShippingAddress(prev => ({ ...prev, address2: e.target.value }))}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
+              {walletAddress && (
+                <>
                   <div>
-                    <label htmlFor="city" className="block text-sm font-medium text-gray-700">
-                      City
+                    <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                      Email
                     </label>
                     <input
-                      type="text"
-                      id="city"
-                      value={shippingAddress.city}
-                      onChange={(e) => setShippingAddress(prev => ({ ...prev, city: e.target.value }))}
+                      type="email"
+                      id="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
                       className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                      placeholder="your@email.com"
                     />
                   </div>
 
-                  <div>
-                    <label htmlFor="province" className="block text-sm font-medium text-gray-700">
-                      State/Province
-                    </label>
-                    <input
-                      type="text"
-                      id="province"
-                      value={shippingAddress.province}
-                      onChange={(e) => setShippingAddress(prev => ({ ...prev, province: e.target.value }))}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                    />
-                  </div>
-                </div>
+                  <div className="space-y-4">
+                    <h4 className="font-medium text-gray-900">Shipping Address</h4>
+                    
+                    <div>
+                      <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+                        Full Name
+                      </label>
+                      <input
+                        type="text"
+                        id="name"
+                        value={shippingAddress.name}
+                        onChange={(e) => setShippingAddress(prev => ({ ...prev, name: e.target.value }))}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                      />
+                    </div>
 
-                <div>
-                  <label htmlFor="postalCode" className="block text-sm font-medium text-gray-700">
-                    Postal Code
-                  </label>
-                  <input
-                    type="text"
-                    id="postalCode"
-                    value={shippingAddress.postalCode}
-                    onChange={(e) => setShippingAddress(prev => ({ ...prev, postalCode: e.target.value }))}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                  />
-                </div>
-              </div>
+                    <div>
+                      <label htmlFor="address1" className="block text-sm font-medium text-gray-700">
+                        Address Line 1
+                      </label>
+                      <input
+                        type="text"
+                        id="address1"
+                        value={shippingAddress.address1}
+                        onChange={(e) => setShippingAddress(prev => ({ ...prev, address1: e.target.value }))}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                      />
+                    </div>
+
+                    <div>
+                      <label htmlFor="address2" className="block text-sm font-medium text-gray-700">
+                        Address Line 2 (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        id="address2"
+                        value={shippingAddress.address2}
+                        onChange={(e) => setShippingAddress(prev => ({ ...prev, address2: e.target.value }))}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label htmlFor="city" className="block text-sm font-medium text-gray-700">
+                          City
+                        </label>
+                        <input
+                          type="text"
+                          id="city"
+                          value={shippingAddress.city}
+                          onChange={(e) => setShippingAddress(prev => ({ ...prev, city: e.target.value }))}
+                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                        />
+                      </div>
+
+                      <div>
+                        <label htmlFor="province" className="block text-sm font-medium text-gray-700">
+                          State/Province
+                        </label>
+                        <input
+                          type="text"
+                          id="province"
+                          value={shippingAddress.province}
+                          onChange={(e) => setShippingAddress(prev => ({ ...prev, province: e.target.value }))}
+                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label htmlFor="postalCode" className="block text-sm font-medium text-gray-700">
+                        Postal Code
+                      </label>
+                      <input
+                        type="text"
+                        id="postalCode"
+                        value={shippingAddress.postalCode}
+                        onChange={(e) => setShippingAddress(prev => ({ ...prev, postalCode: e.target.value }))}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
 
             {error && (
