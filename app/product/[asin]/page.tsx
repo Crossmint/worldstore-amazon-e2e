@@ -6,6 +6,7 @@ import Image from 'next/image';
 import { Star, ShoppingBag, Loader2, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import AddToCartModal from '@/app/components/AddToCartModal';
+import { Header } from '@/app/components/Header';
 
 export default function ProductPage() {
   const params = useParams();
@@ -158,6 +159,7 @@ export default function ProductPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <Header />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Link href="/" className="inline-flex items-center text-blue-600 hover:text-blue-500 mb-8">
           <ArrowLeft className="h-5 w-5 mr-2" />

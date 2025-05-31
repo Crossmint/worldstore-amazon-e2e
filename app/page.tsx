@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Search, ShoppingBag, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { Header } from './components/Header';
 
 export default function Home() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -72,7 +73,8 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-white to-gray-50">
+    <div className="min-h-screen bg-gradient-to-b from-white to-gray-50">
+      <Header />
       {/* Hero Section */}
       <div className="relative overflow-hidden">
         <div className="max-w-7xl mx-auto">
@@ -200,6 +202,6 @@ export default function Home() {
           </div>
         ) : null}
       </div>
-    </main>
+    </div>
   );
 } 
