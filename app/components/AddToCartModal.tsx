@@ -264,6 +264,12 @@ export default function AddToCartModal({ isOpen, onClose, product }: AddToCartMo
       return;
     }
 
+    // Check balance before proceeding
+    if (quote && balance && Number(balance.value) < Number(quote.totalPrice.amount)) {
+      setError(`Insufficient balance. You need ${quote.totalPrice.amount} credits.`);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     setPhase('signing');
@@ -329,83 +335,82 @@ export default function AddToCartModal({ isOpen, onClose, product }: AddToCartMo
               </div>
             </div>
 
-            <div className="border-t border-gray-200 pt-4">
-              <div className="flex justify-between mb-2">
-                <span className="text-gray-600">Price:</span>
-                <span className="font-medium">${product.price}</span>
-              </div>
-              {quote && (
-                <>
-                  <div className="flex justify-between mb-2">
-                    <span className="text-gray-600">Shipping:</span>
-                    <span className="font-medium">${quote.totalPrice.amount}</span>
-                  </div>
-                  <div className="flex justify-between font-bold text-lg mt-4">
-                    <span>Total:</span>
-                    <span>${quote.totalPrice.amount}</span>
-                  </div>
-                </>
-              )}
-
-              {/* Credit Balance and Faucet Section */}
-              {walletAddress && balance && (
-                <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-gray-600">Your Sepolia Balance:</span>
-                    <span className="font-medium">{balance.formatted} {balance.symbol}</span>
-                  </div>
-                  
-                  {quote && Number(balance.value) < Number(quote.totalPrice.amount) && (
-                    <div className="mt-2">
-                      {faucetStatus === 'idle' && (
-                        <button
-                          onClick={requestFaucet}
-                          className="w-full bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition-colors"
-                        >
-                          Request More Credits
-                        </button>
-                      )}
-                      {faucetStatus === 'requesting' && (
-                        <div className="flex items-center justify-center space-x-2 text-blue-600">
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          <span>{faucetMessage}</span>
-                        </div>
-                      )}
-                      {faucetStatus === 'success' && (
-                        <div className="text-green-600 text-center">
-                          {faucetMessage}
-                        </div>
-                      )}
-                      {faucetStatus === 'error' && (
-                        <div className="text-red-600 text-center">
-                          {faucetMessage}
-                        </div>
-                      )}
-                    </div>
-                  )}
+            <div className="space-y-4 bg-gray-50 p-4 rounded-lg">
+              <h4 className="font-medium text-gray-900">Quote Details</h4>
+              <div className="text-sm text-gray-600 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-lg font-medium">
+                    Total Price: ${quote?.totalPrice.amount} credits
+                  </p>
                 </div>
-              )}
-
-              <div className="mt-6">
-                <button
-                  onClick={handleFinalize}
-                  disabled={loading || (quote && Number(balance?.value || 0) < Number(quote.totalPrice.amount))}
-                  className={`w-full py-2 px-4 rounded ${
-                    loading || (quote && Number(balance?.value || 0) < Number(quote.totalPrice.amount))
-                      ? 'bg-gray-300 cursor-not-allowed'
-                      : 'bg-blue-600 text-white hover:bg-blue-700'
-                  } transition-colors`}
-                >
-                  {loading ? (
-                    <div className="flex items-center justify-center space-x-2">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span>Processing...</span>
-                    </div>
-                  ) : (
-                    'Complete Purchase'
-                  )}
-                </button>
+                <p>Quote Valid Until: {formatDate(quote?.expiresAt || '')}</p>
+                <p className="text-xs text-gray-500">
+                  This quote is valid for 10 minutes. After that, you'll need to request a new quote.
+                </p>
               </div>
+            </div>
+
+            <div className="space-y-4">
+              <h4 className="font-medium text-gray-900">Order Summary</h4>
+              <div className="text-sm text-gray-600">
+                <p>Email: {email}</p>
+                <p>Shipping Address:</p>
+                <p>{shippingAddress.name}</p>
+                <p>{shippingAddress.address1}</p>
+                {shippingAddress.address2 && <p>{shippingAddress.address2}</p>}
+                <p>{shippingAddress.city}, {shippingAddress.province} {shippingAddress.postalCode}</p>
+                <p>{shippingAddress.country}</p>
+              </div>
+            </div>
+
+            {error && (
+              <div className="text-sm text-red-600">
+                {error}
+                {error?.includes('Insufficient balance') && (
+                  <div className="mt-2">
+                    {faucetStatus === 'idle' && (
+                      <button
+                        onClick={requestFaucet}
+                        className="w-full bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition-colors"
+                      >
+                        Request More Credits
+                      </button>
+                    )}
+                    {faucetStatus === 'requesting' && (
+                      <div className="flex items-center justify-center space-x-2 text-blue-600">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>{faucetMessage}</span>
+                      </div>
+                    )}
+                    {faucetStatus === 'success' && (
+                      <div className="text-green-600 text-center">
+                        {faucetMessage}
+                      </div>
+                    )}
+                    {faucetStatus === 'error' && (
+                      <div className="text-red-600 text-center">
+                        {faucetMessage}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex space-x-4">
+              <button
+                onClick={() => setPhase('details')}
+                className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                Back
+              </button>
+              <button
+                onClick={handleFinalize}
+                disabled={loading}
+                className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-300"
+              >
+                {loading ? 'Processing...' : 'Finalize Order'}
+              </button>
             </div>
           </div>
         );
