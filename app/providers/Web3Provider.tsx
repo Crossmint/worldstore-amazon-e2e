@@ -19,6 +19,7 @@ import {
   QueryClient,
 } from "@tanstack/react-query";
 import { WALLET_CONFIG } from '../config/wallet';
+import { BalanceProvider } from '../contexts/BalanceContext';
 
 const config = getDefaultConfig({
   appName: WALLET_CONFIG.appName,
@@ -34,7 +35,9 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
         <RainbowKitProvider>
-          {children}
+          <BalanceProvider>
+            {children}
+          </BalanceProvider>
         </RainbowKitProvider>
       </QueryClientProvider>
     </WagmiProvider>
