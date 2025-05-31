@@ -242,6 +242,17 @@ export default function ProductPage() {
                   </p>
                 )}
 
+                {/* Add availability status */}
+                {product.availability && (
+                  <p className={`text-sm font-medium mt-2 ${
+                    product.availability.toLowerCase().includes('in stock') 
+                      ? 'text-green-600' 
+                      : 'text-red-600'
+                  }`}>
+                    {product.availability}
+                  </p>
+                )}
+
                 {variants.length > 0 && (
                   <div className="mt-4">
                     <label htmlFor="variant-select" className="block text-sm font-medium text-gray-700 mb-2">

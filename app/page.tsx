@@ -57,7 +57,12 @@ export default function Home() {
         }
       } else {
         // For keyword search, we get an array of products in organic_results
-        setResults(data.organic_results || []);
+        // Filter out products without valid prices
+        const validProducts = (data.organic_results || []).filter((product: any) => {
+          const price = product.price || product.extracted_price || product.buybox?.price?.value;
+          return price && price !== 'Price not available' && price !== 'N/A';
+        });
+        setResults(validProducts);
       }
     } catch (err) {
       console.error('Search error:', err);
