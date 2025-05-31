@@ -1,8 +1,11 @@
+'use client';
+
 import { useState, useEffect } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import { WalletConnect } from './WalletConnect';
-import { useAccount, useWalletClient, useSignMessage, useSendTransaction, useBalance } from 'wagmi';
+import { useAccount, useWalletClient, useSignMessage, useSendTransaction } from 'wagmi';
 import { parseTransaction } from 'viem';
+import { useBalanceContext } from '../contexts/BalanceContext';
 
 interface AddToCartModalProps {
   isOpen: boolean;
@@ -45,6 +48,8 @@ export default function AddToCartModal({ isOpen, onClose, product }: AddToCartMo
   const { address: walletAddress } = useAccount();
   const { data: walletClient } = useWalletClient();
   const { signMessageAsync } = useSignMessage();
+  const { sendTransaction } = useSendTransaction();
+  const { balance, formattedBalance, refetchBalance } = useBalanceContext();
   const [email, setEmail] = useState('');
   const [shippingAddress, setShippingAddress] = useState({
     name: '',
@@ -60,51 +65,55 @@ export default function AddToCartModal({ isOpen, onClose, product }: AddToCartMo
   const [orderStatus, setOrderStatus] = useState<string | null>(null);
   const [quote, setQuote] = useState<Quote | null>(null);
   const [orderData, setOrderData] = useState<OrderData | null>(null);
-  const { sendTransaction } = useSendTransaction();
   const [faucetStatus, setFaucetStatus] = useState<'idle' | 'requesting' | 'success' | 'error'>('idle');
   const [faucetMessage, setFaucetMessage] = useState<string>('');
   const [faucetTxHash, setFaucetTxHash] = useState<string>('');
 
-  // Get Sepolia balance
-  const { data: balance } = useBalance({
-    address: walletAddress,
-    chainId: 11155111, // Sepolia
-  });
-
-  // Poll faucet status
+  // Fetch balance when modal opens
   useEffect(() => {
-    let pollInterval: NodeJS.Timeout;
-
-    if (faucetTxHash && faucetStatus === 'requesting') {
-      pollInterval = setInterval(async () => {
-        try {
-          const response = await fetch(`https://worldstore-credit-faucet.vercel.app/api/faucet/status?txHash=${faucetTxHash}`);
-          const data = await response.json();
-
-          if (data.status === 'success') {
-            setFaucetStatus('success');
-            setFaucetMessage('Credits received successfully!');
-            clearInterval(pollInterval);
-          } else if (data.error) {
-            setFaucetStatus('error');
-            setFaucetMessage(data.message || 'Failed to receive credits');
-            clearInterval(pollInterval);
-          }
-        } catch (err) {
-          console.error('Error polling faucet status:', err);
-          setFaucetStatus('error');
-          setFaucetMessage('Failed to check faucet status');
-          clearInterval(pollInterval);
-        }
-      }, 1000);
+    if (isOpen && walletAddress) {
+      refetchBalance();
     }
+  }, [isOpen, walletAddress, refetchBalance]);
 
-    return () => {
-      if (pollInterval) {
-        clearInterval(pollInterval);
-      }
-    };
-  }, [faucetTxHash, faucetStatus]);
+  const resetModal = () => {
+    setLoading(false);
+    setError(null);
+    setEmail('');
+    setShippingAddress({
+      name: '',
+      address1: '',
+      address2: '',
+      city: '',
+      province: '',
+      postalCode: '',
+      country: 'US'
+    });
+    setPhase('details');
+    setOrderId(null);
+    setOrderStatus(null);
+    setQuote(null);
+    setOrderData(null);
+    setFaucetStatus('idle');
+    setFaucetMessage('');
+    setFaucetTxHash('');
+  };
+
+  const handleClose = () => {
+    resetModal();
+    onClose();
+  };
+
+  // Log balance changes
+  useEffect(() => {
+    if (balance) {
+      console.log('Credit Balance:', {
+        address: walletAddress,
+        formatted: formattedBalance,
+        value: balance.toString(),
+      });
+    }
+  }, [balance, walletAddress, formattedBalance]);
 
   const requestFaucet = async () => {
     if (!walletAddress) return;
@@ -113,7 +122,7 @@ export default function AddToCartModal({ isOpen, onClose, product }: AddToCartMo
     setFaucetMessage('Requesting credits...');
 
     try {
-      const response = await fetch('https://worldstore-credit-faucet.vercel.app/api/faucet', {
+      const response = await fetch('/api/worldstore/faucet', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -140,6 +149,44 @@ export default function AddToCartModal({ isOpen, onClose, product }: AddToCartMo
     }
   };
 
+  // Poll faucet status
+  useEffect(() => {
+    let pollInterval: NodeJS.Timeout;
+
+    if (faucetTxHash && faucetStatus === 'requesting') {
+      pollInterval = setInterval(async () => {
+        try {
+          const response = await fetch(`/api/worldstore/faucet?txHash=${faucetTxHash}`);
+          const data = await response.json();
+
+          if (data.status === 'success') {
+            setFaucetStatus('success');
+            setFaucetMessage('Credits received successfully!');
+            // Refetch balance after successful transaction
+            await refetchBalance();
+            clearInterval(pollInterval);
+          } else if (data.error) {
+            setFaucetStatus('error');
+            setFaucetMessage(data.message || 'Failed to receive credits');
+            clearInterval(pollInterval);
+          }
+        } catch (err) {
+          console.error('Error polling faucet status:', err);
+          setFaucetStatus('error');
+          setFaucetMessage('Failed to check faucet status');
+          clearInterval(pollInterval);
+        }
+      }, 1000);
+    }
+
+    return () => {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
+    };
+  }, [faucetTxHash, faucetStatus, refetchBalance]);
+
+  // Poll order status
   useEffect(() => {
     let pollInterval: NodeJS.Timeout;
 
@@ -151,6 +198,8 @@ export default function AddToCartModal({ isOpen, onClose, product }: AddToCartMo
 
           if (data.phase === 'completed') {
             setPhase('success');
+            // Refetch balance after successful purchase
+            await refetchBalance();
             clearInterval(pollInterval);
           } else if (data.phase === 'failed') {
             setPhase('error');
@@ -168,7 +217,7 @@ export default function AddToCartModal({ isOpen, onClose, product }: AddToCartMo
         clearInterval(pollInterval);
       }
     };
-  }, [orderId, phase]);
+  }, [orderId, phase, refetchBalance]);
 
   if (!isOpen) return null;
 
@@ -265,7 +314,7 @@ export default function AddToCartModal({ isOpen, onClose, product }: AddToCartMo
     }
 
     // Check balance before proceeding
-    if (quote && balance && Number(balance.value) < Number(quote.totalPrice.amount)) {
+    if (quote && balance && Number(balance) < Number(quote.totalPrice.amount)) {
       setError(`Insufficient balance. You need ${quote.totalPrice.amount} credits.`);
       return;
     }
@@ -277,10 +326,21 @@ export default function AddToCartModal({ isOpen, onClose, product }: AddToCartMo
     try {
       const { serializedTransaction } = orderData.payment.preparation;
       
-      console.log('Original transaction:', serializedTransaction);
+      console.log('Original transaction:', {
+        serializedTransaction,
+        type: typeof serializedTransaction,
+        length: serializedTransaction?.length
+      });
 
+      if (!serializedTransaction || typeof serializedTransaction !== 'string') {
+        throw new Error('Invalid transaction data received from Crossmint');
+      }
+
+      // Ensure the transaction starts with 0x
+      const txHex = serializedTransaction.startsWith('0x') ? serializedTransaction : `0x${serializedTransaction}`;
+      
       // Parse the transaction
-      const tx = parseTransaction(serializedTransaction as `0x${string}`);
+      const tx = parseTransaction(txHex as `0x${string}`);
       console.log('Parsed transaction:', tx);
 
       // Send the transaction using wagmi
@@ -302,7 +362,12 @@ export default function AddToCartModal({ isOpen, onClose, product }: AddToCartMo
         error: err,
         message: err instanceof Error ? err.message : 'Unknown error',
         stack: err instanceof Error ? err.stack : undefined,
-        name: err instanceof Error ? err.name : typeof err
+        name: err instanceof Error ? err.name : typeof err,
+        orderData: orderData ? {
+          hasPayment: !!orderData.payment,
+          hasPreparation: !!orderData.payment?.preparation,
+          serializedTx: orderData.payment?.preparation?.serializedTransaction
+        } : null
       });
       setError(err instanceof Error ? err.message : 'Failed to process checkout');
       setPhase('error');
@@ -319,6 +384,17 @@ export default function AddToCartModal({ isOpen, onClose, product }: AddToCartMo
   const renderContent = () => {
     switch (phase) {
       case 'review':
+        console.log('Review phase debug:', {
+          walletAddress,
+          balance,
+          formattedBalance,
+          quote,
+          hasBalance: !!balance,
+          hasFormattedBalance: !!formattedBalance,
+          hasQuote: !!quote,
+          quoteAmount: quote?.totalPrice.amount,
+          balanceComparison: balance && quote ? Number(balance) < Number(quote.totalPrice.amount) : null
+        });
         return (
           <div className="space-y-6">
             <div className="flex items-start space-x-4">
@@ -340,13 +416,62 @@ export default function AddToCartModal({ isOpen, onClose, product }: AddToCartMo
               <div className="text-sm text-gray-600 space-y-2">
                 <div className="flex items-center justify-between">
                   <p className="text-lg font-medium">
-                    Total Price: ${quote?.totalPrice.amount} credits
+                    Total Price: {quote?.totalPrice.amount} credits
                   </p>
                 </div>
                 <p>Quote Valid Until: {formatDate(quote?.expiresAt || '')}</p>
                 <p className="text-xs text-gray-500">
                   This quote is valid for 10 minutes. After that, you'll need to request a new quote.
                 </p>
+                
+                {/* Credit Balance Section */}
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  {/* Always show balance if we have a wallet */}
+                  {walletAddress && (
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-gray-600">Your Credit Balance:</span>
+                      <span className="font-medium">
+                        {formattedBalance ? `${formattedBalance} CREDITS` : 'Loading...'}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Show faucet button if balance is insufficient or not loaded */}
+                  {walletAddress && (formattedBalance === undefined || (quote && balance !== undefined && Number(balance) < Number(quote.totalPrice.amount))) && (
+                    <div className="mt-2">
+                      {formattedBalance === undefined ? (
+                        <p className="text-gray-600 mb-2">Loading your credit balance...</p>
+                      ) : (
+                        <p className="text-red-600 mb-2">You need {quote?.totalPrice.amount} CREDITS to complete this purchase.</p>
+                      )}
+                      
+                      {faucetStatus === 'idle' && (
+                        <button
+                          onClick={requestFaucet}
+                          className="w-full bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition-colors"
+                        >
+                          Request Credits from Faucet
+                        </button>
+                      )}
+                      {faucetStatus === 'requesting' && (
+                        <div className="flex items-center justify-center space-x-2 text-blue-600">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <span>{faucetMessage}</span>
+                        </div>
+                      )}
+                      {faucetStatus === 'success' && (
+                        <div className="text-green-600 text-center">
+                          {faucetMessage}
+                        </div>
+                      )}
+                      {faucetStatus === 'error' && (
+                        <div className="text-red-600 text-center">
+                          {faucetMessage}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -363,40 +488,6 @@ export default function AddToCartModal({ isOpen, onClose, product }: AddToCartMo
               </div>
             </div>
 
-            {error && (
-              <div className="text-sm text-red-600">
-                {error}
-                {error?.includes('Insufficient balance') && (
-                  <div className="mt-2">
-                    {faucetStatus === 'idle' && (
-                      <button
-                        onClick={requestFaucet}
-                        className="w-full bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition-colors"
-                      >
-                        Request More Credits
-                      </button>
-                    )}
-                    {faucetStatus === 'requesting' && (
-                      <div className="flex items-center justify-center space-x-2 text-blue-600">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        <span>{faucetMessage}</span>
-                      </div>
-                    )}
-                    {faucetStatus === 'success' && (
-                      <div className="text-green-600 text-center">
-                        {faucetMessage}
-                      </div>
-                    )}
-                    {faucetStatus === 'error' && (
-                      <div className="text-red-600 text-center">
-                        {faucetMessage}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
             <div className="flex space-x-4">
               <button
                 onClick={() => setPhase('details')}
@@ -406,7 +497,7 @@ export default function AddToCartModal({ isOpen, onClose, product }: AddToCartMo
               </button>
               <button
                 onClick={handleFinalize}
-                disabled={loading}
+                disabled={loading || (quote !== null && balance !== undefined && balance !== null && Number(balance) < Number(quote.totalPrice.amount))}
                 className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-300"
               >
                 {loading ? 'Processing...' : 'Finalize Order'}
@@ -439,7 +530,7 @@ export default function AddToCartModal({ isOpen, onClose, product }: AddToCartMo
             <h3 className="text-lg font-medium text-gray-900">Order Successful!</h3>
             <p className="text-sm text-gray-600">Thank you for your purchase. You will receive a confirmation email shortly.</p>
             <button
-              onClick={onClose}
+              onClick={handleClose}
               className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             >
               Close
@@ -494,12 +585,23 @@ export default function AddToCartModal({ isOpen, onClose, product }: AddToCartMo
                 <h4 className="font-medium text-gray-900 mb-2">Connect Wallet</h4>
                 <p className="text-sm text-gray-600 mb-4">Connect your wallet to proceed with checkout</p>
                 <WalletConnect />
+                {walletAddress && (
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                        <span className="text-sm font-medium text-gray-900">Connected</span>
+                      </div>
+                      <span className="text-sm text-gray-500">{walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}</span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {walletAddress && (
                 <>
                   <div>
-                    <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                    <label htmlFor="email" className="block text-sm font-medium text-gray-900">
                       Email
                     </label>
                     <input
@@ -507,7 +609,7 @@ export default function AddToCartModal({ isOpen, onClose, product }: AddToCartMo
                       id="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                      className="mt-1 block w-full rounded-md border-2 border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm bg-white text-gray-900"
                       placeholder="your@email.com"
                     />
                   </div>
@@ -516,7 +618,7 @@ export default function AddToCartModal({ isOpen, onClose, product }: AddToCartMo
                     <h4 className="font-medium text-gray-900">Shipping Address</h4>
                     
                     <div>
-                      <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+                      <label htmlFor="name" className="block text-sm font-medium text-gray-900">
                         Full Name
                       </label>
                       <input
@@ -524,12 +626,12 @@ export default function AddToCartModal({ isOpen, onClose, product }: AddToCartMo
                         id="name"
                         value={shippingAddress.name}
                         onChange={(e) => setShippingAddress(prev => ({ ...prev, name: e.target.value }))}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                        className="mt-1 block w-full rounded-md border-2 border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm bg-white text-gray-900"
                       />
                     </div>
 
                     <div>
-                      <label htmlFor="address1" className="block text-sm font-medium text-gray-700">
+                      <label htmlFor="address1" className="block text-sm font-medium text-gray-900">
                         Address Line 1
                       </label>
                       <input
@@ -537,12 +639,12 @@ export default function AddToCartModal({ isOpen, onClose, product }: AddToCartMo
                         id="address1"
                         value={shippingAddress.address1}
                         onChange={(e) => setShippingAddress(prev => ({ ...prev, address1: e.target.value }))}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                        className="mt-1 block w-full rounded-md border-2 border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm bg-white text-gray-900"
                       />
                     </div>
 
                     <div>
-                      <label htmlFor="address2" className="block text-sm font-medium text-gray-700">
+                      <label htmlFor="address2" className="block text-sm font-medium text-gray-900">
                         Address Line 2 (Optional)
                       </label>
                       <input
@@ -550,13 +652,13 @@ export default function AddToCartModal({ isOpen, onClose, product }: AddToCartMo
                         id="address2"
                         value={shippingAddress.address2}
                         onChange={(e) => setShippingAddress(prev => ({ ...prev, address2: e.target.value }))}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                        className="mt-1 block w-full rounded-md border-2 border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm bg-white text-gray-900"
                       />
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label htmlFor="city" className="block text-sm font-medium text-gray-700">
+                        <label htmlFor="city" className="block text-sm font-medium text-gray-900">
                           City
                         </label>
                         <input
@@ -564,12 +666,12 @@ export default function AddToCartModal({ isOpen, onClose, product }: AddToCartMo
                           id="city"
                           value={shippingAddress.city}
                           onChange={(e) => setShippingAddress(prev => ({ ...prev, city: e.target.value }))}
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                          className="mt-1 block w-full rounded-md border-2 border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm bg-white text-gray-900"
                         />
                       </div>
 
                       <div>
-                        <label htmlFor="province" className="block text-sm font-medium text-gray-700">
+                        <label htmlFor="province" className="block text-sm font-medium text-gray-900">
                           State/Province
                         </label>
                         <input
@@ -577,13 +679,13 @@ export default function AddToCartModal({ isOpen, onClose, product }: AddToCartMo
                           id="province"
                           value={shippingAddress.province}
                           onChange={(e) => setShippingAddress(prev => ({ ...prev, province: e.target.value }))}
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                          className="mt-1 block w-full rounded-md border-2 border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm bg-white text-gray-900"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label htmlFor="postalCode" className="block text-sm font-medium text-gray-700">
+                      <label htmlFor="postalCode" className="block text-sm font-medium text-gray-900">
                         Postal Code
                       </label>
                       <input
@@ -591,7 +693,7 @@ export default function AddToCartModal({ isOpen, onClose, product }: AddToCartMo
                         id="postalCode"
                         value={shippingAddress.postalCode}
                         onChange={(e) => setShippingAddress(prev => ({ ...prev, postalCode: e.target.value }))}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                        className="mt-1 block w-full rounded-md border-2 border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm bg-white text-gray-900"
                       />
                     </div>
                   </div>
@@ -628,7 +730,7 @@ export default function AddToCartModal({ isOpen, onClose, product }: AddToCartMo
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4 overflow-y-auto">
       <div className="bg-white rounded-lg max-w-md w-full p-6 relative my-8 max-h-[90vh] overflow-y-auto">
         <button
-          onClick={onClose}
+          onClick={handleClose}
           className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 z-10"
         >
           <X className="h-6 w-6" />
