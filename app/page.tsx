@@ -81,7 +81,7 @@ export default function Home() {
           <div className="relative z-10 pb-8 sm:pb-16 md:pb-20 lg:max-w-2xl lg:w-full lg:pb-28 xl:pb-32">
             <main className="mt-10 mx-auto max-w-7xl px-4 sm:mt-12 sm:px-6 md:mt-16 lg:mt-20 lg:px-8 xl:mt-28">
               <div className="sm:text-center lg:text-left">
-                <h1 className="text-4xl tracking-tight font-extrabold text-gray-900 sm:text-5xl md:text-6xl">
+                <h1 className="text-3xl tracking-tight font-extrabold text-gray-900 sm:text-4xl md:text-5xl lg:text-6xl">
                   <span className="block">Shop the future with</span>
                   <span className="block text-indigo-600">Worldstore</span>
                 </h1>
@@ -95,17 +95,17 @@ export default function Home() {
       </div>
 
       {/* Search Section */}
-      <div className="relative z-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-12 sm:-mt-16 md:-mt-20 lg:-mt-24">
-        <div className="bg-white rounded-2xl shadow-xl p-6 sm:p-8">
+      <div className="relative z-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 sm:-mt-12 md:-mt-16 lg:-mt-20">
+        <div className="bg-white rounded-2xl shadow-xl p-4 sm:p-6 md:p-8">
           <form onSubmit={handleSearch} className="relative">
-            <div className="flex items-center">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
               <div className="relative flex-1">
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search by ASIN or keywords (e.g., B01CI57V2O or adidas shoes)"
-                  className="block w-full pl-10 pr-3 py-4 border border-gray-300 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm transition-all duration-200"
+                  className="block w-full pl-10 pr-3 py-3 sm:py-4 border border-gray-300 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm sm:text-base transition-all duration-200"
                 />
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center">
                   <Search className="h-5 w-5 text-gray-400" />
@@ -114,7 +114,7 @@ export default function Home() {
               <button
                 type="submit"
                 disabled={loading}
-                className="ml-3 inline-flex items-center px-6 py-4 border border-transparent text-base font-medium rounded-xl text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200 disabled:bg-indigo-300"
+                className="w-full sm:w-auto inline-flex items-center justify-center px-6 py-3 sm:py-4 border border-transparent text-base font-medium rounded-xl text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200 disabled:bg-indigo-300"
               >
                 {loading ? 'Searching...' : 'Search'}
               </button>
@@ -124,14 +124,14 @@ export default function Home() {
       </div>
 
       {/* Results Section */}
-      <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto py-8 sm:py-12 px-4 sm:px-6 lg:px-8">
         {loading ? (
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
             <p className="mt-4 text-gray-500">Searching products...</p>
           </div>
         ) : results.length > 0 ? (
-          <div className="grid grid-cols-1 gap-y-10 gap-x-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 xl:gap-x-8">
+          <div className="grid grid-cols-1 gap-4 sm:gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {results.map((product, index) => {
               const productTitle = product.title || 'No title available';
               const productImageUrl = product.thumbnail || product.main_image || '/placeholder.png';
@@ -150,21 +150,21 @@ export default function Home() {
                   key={`${productAsin}-${position}`}
                   className="block"
                 >
-                  <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-300">
-                    <div className="relative h-48 bg-gray-100">
+                  <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-300 h-full flex flex-col">
+                    <div className="relative h-40 sm:h-48 bg-gray-100">
                       <Image
                         src={productImageUrl}
                         alt={productTitle}
                         fill
                         className="object-contain p-4"
-                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                        sizes="(max-width: 640px) 100vw, (max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
                       />
                     </div>
-                    <div className="p-4">
-                      <h3 className="text-lg font-semibold text-gray-900 mb-2 line-clamp-2">
+                    <div className="p-4 flex-grow flex flex-col">
+                      <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2 line-clamp-2">
                         {productTitle}
                       </h3>
-                      <p className="text-xl font-bold text-blue-600">
+                      <p className="text-lg sm:text-xl font-bold text-blue-600 mt-auto">
                         {typeof productPrice === 'string' ? productPrice : `$${productPrice}`}
                       </p>
                       {product.rating && (
@@ -195,7 +195,7 @@ export default function Home() {
             })}
           </div>
         ) : hasSearched ? (
-          <div className="text-center py-12">
+          <div className="text-center py-8 sm:py-12">
             <ShoppingBag className="mx-auto h-12 w-12 text-gray-400" />
             <h3 className="mt-2 text-sm font-medium text-gray-900">No products found</h3>
             <p className="mt-1 text-sm text-gray-500">Try searching with different keywords.</p>
