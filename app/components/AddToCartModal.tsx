@@ -399,16 +399,6 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
   };
 
   const handleFinalize = async () => {
-    console.log('Finalize button clicked - Initial state:', {
-      hasWalletClient: !!walletClient,
-      hasOrderData: !!orderData,
-      hasPayment: !!orderData?.payment,
-      hasPreparation: !!orderData?.payment?.preparation,
-      hasSerializedTx: !!orderData?.payment?.preparation?.serializedTransaction,
-      balance: balance?.toString(),
-      quoteAmount: quote?.totalPrice.amount
-    });
-
     if (!walletClient) {
       setError('Wallet not connected');
       return;
@@ -437,12 +427,6 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
     try {
       const { serializedTransaction } = orderData.payment.preparation;
       
-      console.log('Processing transaction:', {
-        serializedTransaction,
-        type: typeof serializedTransaction,
-        length: serializedTransaction?.length
-      });
-
       if (!serializedTransaction || typeof serializedTransaction !== 'string') {
         throw new Error('Invalid transaction data received from Crossmint');
       }
@@ -463,28 +447,12 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
         maxPriorityFeePerGas: tx.maxPriorityFeePerGas?.toString()
       });
 
-      // Validate all required transaction fields
-      if (!tx.to || !tx.data || tx.value === undefined || !tx.gas || !tx.nonce || !tx.chainId) {
-        const missingFields = [];
-        if (!tx.to) missingFields.push('to');
-        if (!tx.data) missingFields.push('data');
-        if (tx.value === undefined) missingFields.push('value');
-        if (!tx.gas) missingFields.push('gas');
-        if (!tx.nonce) missingFields.push('nonce');
-        if (!tx.chainId) missingFields.push('chainId');
-        throw new Error(`Missing required transaction fields: ${missingFields.join(', ')}`);
-      }
-
       // Send the transaction using wagmi
       const result = await sendTransaction({
-        to: tx.to,
-        data: tx.data,
-        value: tx.value,
-        gas: tx.gas,
-        nonce: tx.nonce,
-        chainId: tx.chainId,
-        maxFeePerGas: tx.maxFeePerGas,
-        maxPriorityFeePerGas: tx.maxPriorityFeePerGas
+        to: tx.to as `0x${string}`,
+        data: tx.data as `0x${string}`,
+        value: BigInt(0), // ERC20 transfer
+        chainId: Number(tx.chainId)
       });
 
       console.log('Transaction sent:', result);
