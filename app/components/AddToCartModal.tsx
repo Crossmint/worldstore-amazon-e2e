@@ -102,6 +102,9 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
     setFaucetStatus('idle');
     setFaucetMessage('');
     setFaucetTxHash('');
+    setRetryCount(0);
+    setForceUpdate(0);
+    setRefreshingQuote(false);
   };
 
   const handleClose = () => {
@@ -184,76 +187,73 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
               setFaucetMessage('Credits received!');
               clearInterval(pollInterval);
               
-              console.log('Faucet success - Current state:', {
-                balance: balance?.toString(),
-                formattedBalance,
-                quoteAmount: quote?.totalPrice.amount
-              });
-
+              // Update balance
               await refetchBalance();
               
-              // After successful faucet, redo the order to get fresh transaction
-              try {
-                setRefreshingQuote(true);
-                console.log('Redoing order after faucet...');
-                const response = await fetch('/api/worldstore/crossmint', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                  },
-                  body: JSON.stringify({
-                    ...product,
-                    email,
-                    shippingAddress,
-                    walletAddress
-                  }),
-                });
-
-                const data = await response.json();
-                console.log('New order response:', data);
-
-                if (!response.ok) {
-                  throw new Error(data.error || 'Failed to get new order');
-                }
-
-                if (!data.order?.payment?.preparation?.serializedTransaction) {
-                  throw new Error('No transaction data in new order');
-                }
-
-                // Update order data with new transaction
-                setOrderData({
-                  orderId: data.order.orderId,
-                  payment: data.order.payment
-                });
-
-                // Update quote with new data
-                if (data.order?.quote) {
-                  setQuote(data.order.quote);
-                  console.log('Quote updated:', {
-                    newAmount: data.order.quote.totalPrice.amount,
-                    newExpiry: data.order.quote.expiresAt
+              // Only get new order if we're in review phase
+              if (phase === 'review') {
+                try {
+                  setRefreshingQuote(true);
+                  const response = await fetch('/api/worldstore/crossmint', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                      ...product,
+                      email,
+                      shippingAddress,
+                      walletAddress
+                    }),
                   });
-                }
 
-                console.log('Order redone successfully:', {
-                  hasTransaction: !!data.order?.payment?.preparation?.serializedTransaction,
-                  orderId: data.order.orderId,
-                  hasNewQuote: !!data.order?.quote
-                });
-              } catch (err) {
-                console.error('Failed to redo order:', err);
-                setError('Failed to prepare new order. Please try again.');
-                setPhase('error');
-                return;
-              } finally {
-                setRefreshingQuote(false);
+                  const data = await response.json();
+
+                  if (!response.ok || !data.order?.payment?.preparation?.serializedTransaction) {
+                    throw new Error('Failed to get new order');
+                  }
+
+                  // Store new order data
+                  const newOrderId = data.order.orderId;
+                  const newOrderData = {
+                    orderId: data.order.orderId,
+                    payment: data.order.payment
+                  };
+                  const newQuote = data.order.quote;
+
+                  // Clear all order state first
+                  setOrderId(null);
+                  setOrderStatus(null);
+                  setQuote(null);
+                  setOrderData(null);
+                  setPhase('review');
+                  setLoading(false);
+                  setError(null);
+
+                  // Then set new order state in the next tick
+                  setTimeout(() => {
+                    setOrderId(newOrderId);
+                    setOrderData(newOrderData);
+                    setQuote(newQuote);
+                    
+                    console.log('New order state after faucet:', {
+                      orderId: newOrderId,
+                      hasQuote: !!newQuote,
+                      hasTransaction: !!newOrderData.payment?.preparation?.serializedTransaction,
+                      phase: 'review',
+                      loading: false,
+                      error: null
+                    });
+                  }, 0);
+
+                } catch (err) {
+                  console.error('Failed to refresh order:', err);
+                  setError('Failed to refresh order. Please try again.');
+                  setPhase('error');
+                } finally {
+                  setRefreshingQuote(false);
+                }
               }
-              
-              if (onBalanceUpdate) {
-                onBalanceUpdate();
-              }
-              // Force re-render after balance update
-              setForceUpdate(prev => prev + 1);
               break;
             case 'failed':
               setFaucetStatus('error');
@@ -284,20 +284,20 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
     let pollInterval: NodeJS.Timeout;
 
     if (orderId && phase === 'processing') {
+      console.log('Polling order:', orderId);
       pollInterval = setInterval(async () => {
         try {
           const response = await fetch(`/api/worldstore/crossmint/status?orderId=${orderId}`);
           const data = await response.json();
 
           if (data.phase === 'completed') {
-            setPhase('success');
-            // Refetch balance after successful purchase
-            await refetchBalance();
             clearInterval(pollInterval);
+            setPhase('success');
+            await refetchBalance();
           } else if (data.phase === 'failed') {
+            clearInterval(pollInterval);
             setPhase('error');
             setError('Order failed to process');
-            clearInterval(pollInterval);
           }
         } catch (err) {
           console.error('Error polling order status:', err);
@@ -399,22 +399,11 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
   };
 
   const handleFinalize = async () => {
-    if (!walletClient) {
-      setError('Wallet not connected');
-      return;
-    }
-
-    if (!orderData?.payment?.preparation?.serializedTransaction) {
-      console.error('Missing transaction data:', {
-        orderData,
-        payment: orderData?.payment,
-        preparation: orderData?.payment?.preparation
-      });
+    if (!walletClient || !orderData?.payment?.preparation?.serializedTransaction) {
       setError('Invalid order data. Please try again.');
       return;
     }
 
-    // Check balance before proceeding
     if (quote && balance && Number(balance) < Number(quote.totalPrice.amount)) {
       setError(`Insufficient balance. You need ${quote.totalPrice.amount} credits.`);
       return;
@@ -426,49 +415,20 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
 
     try {
       const { serializedTransaction } = orderData.payment.preparation;
-      
-      if (!serializedTransaction || typeof serializedTransaction !== 'string') {
-        throw new Error('Invalid transaction data received from Crossmint');
-      }
-
-      // Ensure the transaction starts with 0x
       const txHex = serializedTransaction.startsWith('0x') ? serializedTransaction : `0x${serializedTransaction}`;
-      
-      // Parse the transaction
       const tx = parseTransaction(txHex as `0x${string}`);
-      console.log('Parsed transaction details:', {
-        to: tx.to,
-        data: tx.data?.slice(0, 66) + '...', // Log first 32 bytes of data
-        value: tx.value?.toString(),
-        gas: tx.gas?.toString(),
-        nonce: tx.nonce?.toString(),
-        chainId: tx.chainId?.toString(),
-        maxFeePerGas: tx.maxFeePerGas?.toString(),
-        maxPriorityFeePerGas: tx.maxPriorityFeePerGas?.toString()
-      });
 
-      // Send the transaction using wagmi
       const result = await sendTransaction({
         to: tx.to as `0x${string}`,
         data: tx.data as `0x${string}`,
-        value: BigInt(0), // ERC20 transfer
+        value: BigInt(0),
         chainId: Number(tx.chainId)
       });
 
       console.log('Transaction sent:', result);
       setPhase('processing');
     } catch (err) {
-      console.error('Checkout error details:', {
-        error: err,
-        message: err instanceof Error ? err.message : 'Unknown error',
-        stack: err instanceof Error ? err.stack : undefined,
-        name: err instanceof Error ? err.name : typeof err,
-        orderData: orderData ? {
-          hasPayment: !!orderData.payment,
-          hasPreparation: !!orderData.payment?.preparation,
-          serializedTx: orderData.payment?.preparation?.serializedTransaction
-        } : null
-      });
+      console.error('Checkout error:', err);
       setError(err instanceof Error ? err.message : 'Failed to process checkout');
       setPhase('error');
     } finally {
