@@ -463,31 +463,25 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
         maxPriorityFeePerGas: tx.maxPriorityFeePerGas?.toString()
       });
 
-      // Validate required fields and provide defaults for missing ones
-      if (!tx.to || !tx.data || !tx.chainId) {
+      // Validate all required transaction fields
+      if (!tx.to || !tx.data || tx.value === undefined || !tx.gas || !tx.nonce || !tx.chainId) {
         const missingFields = [];
         if (!tx.to) missingFields.push('to');
         if (!tx.data) missingFields.push('data');
+        if (tx.value === undefined) missingFields.push('value');
+        if (!tx.gas) missingFields.push('gas');
+        if (!tx.nonce) missingFields.push('nonce');
         if (!tx.chainId) missingFields.push('chainId');
-        throw new Error(`Missing critical transaction fields: ${missingFields.join(', ')}`);
+        throw new Error(`Missing required transaction fields: ${missingFields.join(', ')}`);
       }
 
-      console.log('Sending transaction with params:', {
-        to: tx.to,
-        data: tx.data?.slice(0, 66) + '...',
-        value: tx.value?.toString() || '0',
-        gas: tx.gas?.toString() || '21000',
-        nonce: tx.nonce,
-        chainId: tx.chainId?.toString()
-      });
-
-      // Send the transaction using wagmi with default values for optional fields
+      // Send the transaction using wagmi
       const result = await sendTransaction({
         to: tx.to,
         data: tx.data,
-        value: tx.value || BigInt(0),
-        gas: tx.gas || BigInt(21000), // Default gas limit
-        nonce: tx.nonce, // Let the provider determine the nonce
+        value: tx.value,
+        gas: tx.gas,
+        nonce: tx.nonce,
         chainId: tx.chainId,
         maxFeePerGas: tx.maxFeePerGas,
         maxPriorityFeePerGas: tx.maxPriorityFeePerGas
