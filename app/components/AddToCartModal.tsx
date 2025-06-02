@@ -133,6 +133,10 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
         body: JSON.stringify({ walletAddress }),
       });
 
+      if (!response.ok) {
+        throw new Error('Failed to request credits');
+      }
+
       const data = await response.json();
 
       if (data.error) {
