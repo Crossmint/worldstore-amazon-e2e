@@ -1,6 +1,20 @@
 import { NextResponse } from 'next/server';
 import https from 'https';
 
+// Helper function to uppercase string values in an object
+const uppercaseObjectValues = (obj: Record<string, any>): Record<string, any> => {
+  return Object.entries(obj).reduce((acc, [key, value]) => {
+    if (typeof value === 'string') {
+      acc[key] = value.toUpperCase();
+    } else if (value && typeof value === 'object' && !Array.isArray(value)) {
+      acc[key] = uppercaseObjectValues(value);
+    } else {
+      acc[key] = value;
+    }
+    return acc;
+  }, {} as Record<string, any>);
+};
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -14,6 +28,10 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+
+    // Uppercase email and shipping address
+    const uppercasedEmail = email.toUpperCase();
+    const uppercasedShippingAddress = uppercaseObjectValues(shippingAddress);
 
     const API_KEY = process.env.CROSSMINT_API_KEY;
     if (!API_KEY) {
@@ -86,13 +104,13 @@ export async function POST(request: Request) {
         ],
         orderParameters: {
           shippingAddress: {
-            name: shippingAddress.name,
-            address1: shippingAddress.address1,
-            address2: shippingAddress.address2 || "",
-            city: shippingAddress.city,
-            province: shippingAddress.province,
-            postalCode: shippingAddress.postalCode,
-            country: shippingAddress.country
+            name: uppercasedShippingAddress.name,
+            address1: uppercasedShippingAddress.address1,
+            address2: uppercasedShippingAddress.address2 || "",
+            city: uppercasedShippingAddress.city,
+            province: uppercasedShippingAddress.province,
+            postalCode: uppercasedShippingAddress.postalCode,
+            country: uppercasedShippingAddress.country
           }
         }
       }),
@@ -120,20 +138,20 @@ export async function POST(request: Request) {
       },
       body: JSON.stringify({
         recipient: {
-          email: email,
+          email: uppercasedEmail,
           physicalAddress: {
-            name: shippingAddress.name,
-            line1: shippingAddress.address1,
-            line2: shippingAddress.address2 || "",
-            city: shippingAddress.city,
-            postalCode: shippingAddress.postalCode,
-            country: shippingAddress.country,
-            state: shippingAddress.province
+            name: uppercasedShippingAddress.name,
+            line1: uppercasedShippingAddress.address1,
+            line2: uppercasedShippingAddress.address2 || "",
+            city: uppercasedShippingAddress.city,
+            postalCode: uppercasedShippingAddress.postalCode,
+            country: uppercasedShippingAddress.country,
+            state: uppercasedShippingAddress.province
           }
         },
         locale: "en-US",
         payment: {
-          receiptEmail: email,
+          receiptEmail: uppercasedEmail,
           method: "ethereum-sepolia",
           currency: "credit",
           payerAddress: walletAddress
