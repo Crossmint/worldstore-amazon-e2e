@@ -13,10 +13,11 @@ interface AddToCartModalProps {
   product: {
     title: string;
     variant?: string;
-    price: string | number;
+    price: number | string;
     thumbnail: string;
     asin: string;
   };
+  onBalanceUpdate?: () => void;
 }
 
 type CheckoutPhase = 'details' | 'review' | 'signing' | 'processing' | 'success' | 'error';
@@ -42,7 +43,7 @@ interface OrderData {
   };
 }
 
-export default function AddToCartModal({ isOpen, onClose, product }: AddToCartModalProps) {
+export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpdate }: AddToCartModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { address: walletAddress } = useAccount();
@@ -68,6 +69,8 @@ export default function AddToCartModal({ isOpen, onClose, product }: AddToCartMo
   const [faucetStatus, setFaucetStatus] = useState<'idle' | 'requesting' | 'success' | 'error'>('idle');
   const [faucetMessage, setFaucetMessage] = useState<string>('');
   const [faucetTxHash, setFaucetTxHash] = useState<string>('');
+  const [retryCount, setRetryCount] = useState(0);
+  const MAX_RETRIES = 1;
 
   // Fetch balance when modal opens
   useEffect(() => {
@@ -142,49 +145,67 @@ export default function AddToCartModal({ isOpen, onClose, product }: AddToCartMo
       } else {
         setFaucetTxHash(data.transactionHash);
         setFaucetMessage('Transaction sent! Waiting for confirmation...');
+        setRetryCount(0); // Reset retry count on successful request
       }
     } catch (err) {
+      console.error('Faucet request error:', err);
       setFaucetStatus('error');
-      setFaucetMessage('Failed to request credits');
+      if (retryCount < MAX_RETRIES) {
+        setFaucetMessage('Request failed. Click to retry...');
+      } else {
+        setFaucetMessage('Failed to request credits. Please try again later.');
+      }
     }
   };
 
   // Poll faucet status
   useEffect(() => {
-    let pollInterval: NodeJS.Timeout;
-
-    if (faucetTxHash && faucetStatus === 'requesting') {
-      pollInterval = setInterval(async () => {
+    if (faucetTxHash) {
+      const pollInterval = setInterval(async () => {
         try {
-          const response = await fetch(`/api/worldstore/faucet?txHash=${faucetTxHash}`);
+          const response = await fetch(`/api/worldstore/faucet/status?txHash=${faucetTxHash}`);
           const data = await response.json();
-
-          if (data.status === 'success') {
-            setFaucetStatus('success');
-            setFaucetMessage('Credits received successfully!');
-            // Refetch balance after successful transaction
-            await refetchBalance();
-            clearInterval(pollInterval);
-          } else if (data.error) {
+          
+          if (data.error) {
             setFaucetStatus('error');
-            setFaucetMessage(data.message || 'Failed to receive credits');
+            setFaucetMessage(data.message || 'Failed to get credits');
             clearInterval(pollInterval);
+            return;
           }
-        } catch (err) {
-          console.error('Error polling faucet status:', err);
+
+          switch (data.status) {
+            case 'success':
+              setFaucetStatus('success');
+              setFaucetMessage('Credits received!');
+              clearInterval(pollInterval);
+              refetchBalance();
+              if (onBalanceUpdate) {
+                onBalanceUpdate();
+              }
+              break;
+            case 'failed':
+              setFaucetStatus('error');
+              setFaucetMessage('Transaction failed');
+              clearInterval(pollInterval);
+              break;
+            case 'pending':
+              setFaucetMessage('Transaction pending...');
+              break;
+            default:
+              console.warn('Unknown status:', data.status);
+              break;
+          }
+        } catch (error) {
+          console.error('Error polling faucet status:', error);
           setFaucetStatus('error');
-          setFaucetMessage('Failed to check faucet status');
+          setFaucetMessage('Failed to check transaction status');
           clearInterval(pollInterval);
         }
-      }, 1000);
-    }
+      }, 2000);
 
-    return () => {
-      if (pollInterval) {
-        clearInterval(pollInterval);
-      }
-    };
-  }, [faucetTxHash, faucetStatus, refetchBalance]);
+      return () => clearInterval(pollInterval);
+    }
+  }, [faucetTxHash, onBalanceUpdate, refetchBalance]);
 
   // Poll order status
   useEffect(() => {
@@ -381,6 +402,75 @@ export default function AddToCartModal({ isOpen, onClose, product }: AddToCartMo
     return date.toLocaleString();
   };
 
+  // Helper function to uppercase string values
+  const uppercaseValue = (value: string) => value.toUpperCase();
+
+  // Update the faucet button UI to handle retries
+  const renderFaucetButton = () => {
+    if (faucetStatus === 'idle' || (faucetStatus === 'error' && retryCount < MAX_RETRIES)) {
+      return (
+        <button
+          onClick={() => {
+            if (faucetStatus === 'error') {
+              setRetryCount(prev => prev + 1);
+            }
+            requestFaucet();
+          }}
+          className="w-full bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition-colors"
+        >
+          {faucetStatus === 'error' ? 'Retry Request' : 'Request Credits from Faucet'}
+        </button>
+      );
+    }
+    return null;
+  };
+
+  // Update the faucet status display in the review phase
+  const renderFaucetStatus = () => {
+    if (faucetStatus === 'requesting') {
+      return (
+        <div className="flex items-center justify-center space-x-2 text-blue-600">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span>{faucetMessage}</span>
+        </div>
+      );
+    }
+    if (faucetStatus === 'success') {
+      return (
+        <div className="text-green-600 text-center">
+          {faucetMessage}
+        </div>
+      );
+    }
+    if (faucetStatus === 'error') {
+      return (
+        <div className="text-red-600 text-center">
+          {faucetMessage}
+        </div>
+      );
+    }
+    return null;
+  };
+
+  // Update the faucet section in the review phase
+  const renderFaucetSection = () => {
+    if (walletAddress && (formattedBalance === undefined || (quote && balance !== undefined && Number(balance) < Number(quote.totalPrice.amount)))) {
+      return (
+        <div className="mt-2">
+          {formattedBalance === undefined ? (
+            <p className="text-gray-600 mb-2">Loading your credit balance...</p>
+          ) : (
+            <p className="text-red-600 mb-2">You need {quote?.totalPrice.amount} CREDITS to complete this purchase.</p>
+          )}
+          
+          {renderFaucetButton()}
+          {renderFaucetStatus()}
+        </div>
+      );
+    }
+    return null;
+  };
+
   const renderContent = () => {
     switch (phase) {
       case 'review':
@@ -393,7 +483,10 @@ export default function AddToCartModal({ isOpen, onClose, product }: AddToCartMo
           hasFormattedBalance: !!formattedBalance,
           hasQuote: !!quote,
           quoteAmount: quote?.totalPrice.amount,
-          balanceComparison: balance && quote ? Number(balance) < Number(quote.totalPrice.amount) : null
+          balanceComparison: balance && quote ? Number(balance) < Number(quote.totalPrice.amount) : null,
+          balanceValue: balance ? balance.toString() : null,
+          quoteValue: quote?.totalPrice.amount,
+          isDisabled: loading || (quote !== null && balance !== undefined && balance !== null && Number(balance) < Number(quote.totalPrice.amount))
         });
         return (
           <div className="space-y-6">
@@ -408,6 +501,9 @@ export default function AddToCartModal({ isOpen, onClose, product }: AddToCartMo
                 {product.variant && (
                   <p className="text-sm text-gray-500">{product.variant}</p>
                 )}
+                <p className="text-lg font-medium text-gray-900 mt-1">
+                  ${typeof product.price === 'string' ? product.price : product.price.toFixed(2)} (+ fees)
+                </p>
               </div>
             </div>
 
@@ -426,7 +522,6 @@ export default function AddToCartModal({ isOpen, onClose, product }: AddToCartMo
                 
                 {/* Credit Balance Section */}
                 <div className="mt-4 pt-4 border-t border-gray-200">
-                  {/* Always show balance if we have a wallet */}
                   {walletAddress && (
                     <div className="flex justify-between items-center mb-2">
                       <span className="text-gray-600">Your Credit Balance:</span>
@@ -435,42 +530,7 @@ export default function AddToCartModal({ isOpen, onClose, product }: AddToCartMo
                       </span>
                     </div>
                   )}
-
-                  {/* Show faucet button if balance is insufficient or not loaded */}
-                  {walletAddress && (formattedBalance === undefined || (quote && balance !== undefined && Number(balance) < Number(quote.totalPrice.amount))) && (
-                    <div className="mt-2">
-                      {formattedBalance === undefined ? (
-                        <p className="text-gray-600 mb-2">Loading your credit balance...</p>
-                      ) : (
-                        <p className="text-red-600 mb-2">You need {quote?.totalPrice.amount} CREDITS to complete this purchase.</p>
-                      )}
-                      
-                      {faucetStatus === 'idle' && (
-                        <button
-                          onClick={requestFaucet}
-                          className="w-full bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition-colors"
-                        >
-                          Request Credits from Faucet
-                        </button>
-                      )}
-                      {faucetStatus === 'requesting' && (
-                        <div className="flex items-center justify-center space-x-2 text-blue-600">
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          <span>{faucetMessage}</span>
-                        </div>
-                      )}
-                      {faucetStatus === 'success' && (
-                        <div className="text-green-600 text-center">
-                          {faucetMessage}
-                        </div>
-                      )}
-                      {faucetStatus === 'error' && (
-                        <div className="text-red-600 text-center">
-                          {faucetMessage}
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  {renderFaucetSection()}
                 </div>
               </div>
             </div>
@@ -478,13 +538,13 @@ export default function AddToCartModal({ isOpen, onClose, product }: AddToCartMo
             <div className="space-y-4">
               <h4 className="font-medium text-gray-900">Order Summary</h4>
               <div className="text-sm text-gray-600">
-                <p>Email: {email}</p>
+                <p>Email: {uppercaseValue(email)}</p>
                 <p>Shipping Address:</p>
-                <p>{shippingAddress.name}</p>
-                <p>{shippingAddress.address1}</p>
-                {shippingAddress.address2 && <p>{shippingAddress.address2}</p>}
-                <p>{shippingAddress.city}, {shippingAddress.province} {shippingAddress.postalCode}</p>
-                <p>{shippingAddress.country}</p>
+                <p>{uppercaseValue(shippingAddress.name)}</p>
+                <p>{uppercaseValue(shippingAddress.address1)}</p>
+                {shippingAddress.address2 && <p>{uppercaseValue(shippingAddress.address2)}</p>}
+                <p>{uppercaseValue(shippingAddress.city)}, {uppercaseValue(shippingAddress.province)} {uppercaseValue(shippingAddress.postalCode)}</p>
+                <p>{uppercaseValue(shippingAddress.country)}</p>
               </div>
             </div>
 
