@@ -71,6 +71,8 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
   const [faucetTxHash, setFaucetTxHash] = useState<string>('');
   const [retryCount, setRetryCount] = useState(0);
   const MAX_RETRIES = 1;
+  const [forceUpdate, setForceUpdate] = useState(0);
+  const [refreshingQuote, setRefreshingQuote] = useState(false);
 
   // Fetch balance when modal opens
   useEffect(() => {
@@ -109,14 +111,13 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
 
   // Log balance changes
   useEffect(() => {
-    if (balance) {
-      console.log('Credit Balance:', {
-        address: walletAddress,
-        formatted: formattedBalance,
-        value: balance.toString(),
-      });
-    }
-  }, [balance, walletAddress, formattedBalance]);
+    console.log('Balance changed:', {
+      balance: balance?.toString(),
+      formattedBalance,
+      quoteAmount: quote?.totalPrice.amount,
+      forceUpdate
+    });
+  }, [balance, formattedBalance, quote, forceUpdate]);
 
   const requestFaucet = async () => {
     if (!walletAddress) return;
@@ -182,10 +183,77 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
               setFaucetStatus('success');
               setFaucetMessage('Credits received!');
               clearInterval(pollInterval);
-              refetchBalance();
+              
+              console.log('Faucet success - Current state:', {
+                balance: balance?.toString(),
+                formattedBalance,
+                quoteAmount: quote?.totalPrice.amount
+              });
+
+              await refetchBalance();
+              
+              // After successful faucet, redo the order to get fresh transaction
+              try {
+                setRefreshingQuote(true);
+                console.log('Redoing order after faucet...');
+                const response = await fetch('/api/worldstore/crossmint', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    ...product,
+                    email,
+                    shippingAddress,
+                    walletAddress
+                  }),
+                });
+
+                const data = await response.json();
+                console.log('New order response:', data);
+
+                if (!response.ok) {
+                  throw new Error(data.error || 'Failed to get new order');
+                }
+
+                if (!data.order?.payment?.preparation?.serializedTransaction) {
+                  throw new Error('No transaction data in new order');
+                }
+
+                // Update order data with new transaction
+                setOrderData({
+                  orderId: data.order.orderId,
+                  payment: data.order.payment
+                });
+
+                // Update quote with new data
+                if (data.order?.quote) {
+                  setQuote(data.order.quote);
+                  console.log('Quote updated:', {
+                    newAmount: data.order.quote.totalPrice.amount,
+                    newExpiry: data.order.quote.expiresAt
+                  });
+                }
+
+                console.log('Order redone successfully:', {
+                  hasTransaction: !!data.order?.payment?.preparation?.serializedTransaction,
+                  orderId: data.order.orderId,
+                  hasNewQuote: !!data.order?.quote
+                });
+              } catch (err) {
+                console.error('Failed to redo order:', err);
+                setError('Failed to prepare new order. Please try again.');
+                setPhase('error');
+                return;
+              } finally {
+                setRefreshingQuote(false);
+              }
+              
               if (onBalanceUpdate) {
                 onBalanceUpdate();
               }
+              // Force re-render after balance update
+              setForceUpdate(prev => prev + 1);
               break;
             case 'failed':
               setFaucetStatus('error');
@@ -293,6 +361,9 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
 
       if (!response.ok) {
         console.error('Crossmint API Error:', data);
+        if (data.error?.includes('SELLER_CONFIG_INVALID')) {
+          throw new Error('Please double check your shipping address and try again');
+        }
         throw new Error(data.error || 'Failed to get quote');
       }
 
@@ -328,13 +399,28 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
   };
 
   const handleFinalize = async () => {
+    console.log('Finalize button clicked - Initial state:', {
+      hasWalletClient: !!walletClient,
+      hasOrderData: !!orderData,
+      hasPayment: !!orderData?.payment,
+      hasPreparation: !!orderData?.payment?.preparation,
+      hasSerializedTx: !!orderData?.payment?.preparation?.serializedTransaction,
+      balance: balance?.toString(),
+      quoteAmount: quote?.totalPrice.amount
+    });
+
     if (!walletClient) {
       setError('Wallet not connected');
       return;
     }
 
-    if (!orderData) {
-      setError('No order data available');
+    if (!orderData?.payment?.preparation?.serializedTransaction) {
+      console.error('Missing transaction data:', {
+        orderData,
+        payment: orderData?.payment,
+        preparation: orderData?.payment?.preparation
+      });
+      setError('Invalid order data. Please try again.');
       return;
     }
 
@@ -351,7 +437,7 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
     try {
       const { serializedTransaction } = orderData.payment.preparation;
       
-      console.log('Original transaction:', {
+      console.log('Processing transaction:', {
         serializedTransaction,
         type: typeof serializedTransaction,
         length: serializedTransaction?.length
@@ -366,18 +452,45 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
       
       // Parse the transaction
       const tx = parseTransaction(txHex as `0x${string}`);
-      console.log('Parsed transaction:', tx);
+      console.log('Parsed transaction details:', {
+        to: tx.to,
+        data: tx.data?.slice(0, 66) + '...', // Log first 32 bytes of data
+        value: tx.value?.toString(),
+        gas: tx.gas?.toString(),
+        nonce: tx.nonce?.toString(),
+        chainId: tx.chainId?.toString(),
+        maxFeePerGas: tx.maxFeePerGas?.toString(),
+        maxPriorityFeePerGas: tx.maxPriorityFeePerGas?.toString()
+      });
 
-      // Send the transaction using wagmi
+      // Validate required fields and provide defaults for missing ones
+      if (!tx.to || !tx.data || !tx.chainId) {
+        const missingFields = [];
+        if (!tx.to) missingFields.push('to');
+        if (!tx.data) missingFields.push('data');
+        if (!tx.chainId) missingFields.push('chainId');
+        throw new Error(`Missing critical transaction fields: ${missingFields.join(', ')}`);
+      }
+
+      console.log('Sending transaction with params:', {
+        to: tx.to,
+        data: tx.data?.slice(0, 66) + '...',
+        value: tx.value?.toString() || '0',
+        gas: tx.gas?.toString() || '21000',
+        nonce: tx.nonce,
+        chainId: tx.chainId?.toString()
+      });
+
+      // Send the transaction using wagmi with default values for optional fields
       const result = await sendTransaction({
         to: tx.to,
         data: tx.data,
         value: tx.value || BigInt(0),
+        gas: tx.gas || BigInt(21000), // Default gas limit
+        nonce: tx.nonce, // Let the provider determine the nonce
+        chainId: tx.chainId,
         maxFeePerGas: tx.maxFeePerGas,
-        maxPriorityFeePerGas: tx.maxPriorityFeePerGas,
-        gas: tx.gas,
-        nonce: tx.nonce,
-        chainId: tx.chainId
+        maxPriorityFeePerGas: tx.maxPriorityFeePerGas
       });
 
       console.log('Transaction sent:', result);
@@ -490,7 +603,10 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
           balanceComparison: balance && quote ? Number(balance) < Number(quote.totalPrice.amount) : null,
           balanceValue: balance ? balance.toString() : null,
           quoteValue: quote?.totalPrice.amount,
-          isDisabled: loading || (quote !== null && balance !== undefined && balance !== null && Number(balance) < Number(quote.totalPrice.amount))
+          isDisabled: loading || (quote !== null && balance !== undefined && balance !== null && Number(balance) < Number(quote.totalPrice.amount)),
+          buttonDisabledReason: loading ? 'loading' : 
+            (quote !== null && balance !== undefined && balance !== null && Number(balance) < Number(quote.totalPrice.amount)) ? 
+            'insufficient_balance' : 'enabled'
         });
         return (
           <div className="space-y-6">
@@ -561,10 +677,16 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
               </button>
               <button
                 onClick={handleFinalize}
-                disabled={loading || (quote !== null && balance !== undefined && balance !== null && Number(balance) < Number(quote.totalPrice.amount))}
+                disabled={loading || refreshingQuote || (quote !== null && balance !== undefined && balance !== null && Number(balance) < Number(quote.totalPrice.amount))}
                 className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-300"
               >
-                {loading ? 'Processing...' : 'Finalize Order'}
+                {loading ? 'Processing...' : 
+                 refreshingQuote ? (
+                   <span className="flex items-center justify-center">
+                     <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                     Refreshing Quote...
+                   </span>
+                 ) : 'Finalize Order'}
               </button>
             </div>
           </div>
