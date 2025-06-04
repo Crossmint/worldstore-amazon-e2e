@@ -45,7 +45,9 @@ export function Header() {
 
           {/* Desktop menu */}
           <div className="hidden md:flex md:items-center md:space-x-4">
-            <ConnectButton />
+            <div className="flex items-center space-x-4">
+              <ConnectButton />
+            </div>
           </div>
         </div>
 
@@ -57,12 +59,6 @@ export function Header() {
             </div>
           </div>
         </div>
-
-        {walletAddress && (
-          <div className="text-sm text-gray-600">
-            Balance: {getFormattedBalance()} CREDITS
-          </div>
-        )}
       </div>
     </header>
   );
