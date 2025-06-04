@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { CROSSMINT_API_KEY } from '@/app/config/wallet';
+import { CROSSMINT_CONFIG } from '@/app/config/crossmint';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -14,7 +15,7 @@ export async function GET(request: Request) {
 
   try {
     const response = await fetch(
-      `https://staging.crossmint.com/api/2022-06-09/orders/${orderId}`,
+      `${CROSSMINT_CONFIG.baseUrl}/api/2022-06-09/orders/${orderId}`,
       {
         headers: {
           'X-API-KEY': CROSSMINT_API_KEY,
