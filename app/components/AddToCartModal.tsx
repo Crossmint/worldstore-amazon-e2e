@@ -44,6 +44,8 @@ interface OrderData {
   };
 }
 
+type Currency = 'credit' | 'usdc';
+
 export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpdate }: AddToCartModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -75,6 +77,7 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
   const MAX_RETRIES = 1;
   const [forceUpdate, setForceUpdate] = useState(0);
   const [refreshingQuote, setRefreshingQuote] = useState(false);
+  const [selectedCurrency, setSelectedCurrency] = useState<Currency>('credit');
 
   // Get chain name from chainId
   const getChainName = (id: number) => {
@@ -382,7 +385,8 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
         email,
         shippingAddress,
         walletAddress,
-        chain: chainName
+        chain: chainName,
+        currency: selectedCurrency
       });
 
       // Get quote first
@@ -396,7 +400,8 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
           email,
           shippingAddress,
           walletAddress,
-          chain: chainName
+          chain: chainName,
+          currency: selectedCurrency
         }),
       });
 
@@ -537,7 +542,12 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
 
   // Update the faucet section in the review phase
   const renderFaucetSection = () => {
-    if (walletAddress && (formattedBalance === undefined || (quote && balance !== undefined && Number(balance) < Number(quote.totalPrice.amount)))) {
+    // Only show faucet for ethereum-sepolia
+    if (chainId !== sepolia.id) {
+      return null;
+    }
+
+    if (walletAddress && selectedCurrency === 'credit' && (formattedBalance === undefined || (quote && balance !== undefined && Number(balance) < Number(quote.totalPrice.amount)))) {
       return (
         <div className="mt-2">
           {formattedBalance === undefined ? (
@@ -598,7 +608,7 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
               <div className="text-sm text-gray-600 space-y-2">
                 <div className="flex items-center justify-between">
                   <p className="text-lg font-medium">
-                    Total Price: {quote?.totalPrice.amount} credits
+                    Total Price: {quote?.totalPrice.amount} {selectedCurrency.toUpperCase()}
                   </p>
                 </div>
                 <p>Quote Valid Until: {formatDate(quote?.expiresAt || '')}</p>
@@ -608,7 +618,7 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
                 
                 {/* Credit Balance Section */}
                 <div className="mt-4 pt-4 border-t border-gray-200">
-                  {walletAddress && (
+                  {walletAddress && selectedCurrency === 'credit' && (
                     <div className="flex justify-between items-center mb-2">
                       <span className="text-gray-600">Your Credit Balance:</span>
                       <span className="font-medium">
@@ -752,6 +762,28 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
 
               {walletAddress && (
                 <>
+                  <div>
+                    <label htmlFor="currency" className="block text-sm font-medium text-gray-900 mb-2">
+                      Payment Currency
+                    </label>
+                    <div className="relative">
+                      <select
+                        id="currency"
+                        value={selectedCurrency}
+                        onChange={(e) => setSelectedCurrency(e.target.value as Currency)}
+                        className="w-full appearance-none rounded-lg border-2 border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-900 shadow-sm hover:border-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                      >
+                        <option value="credit">CREDITS</option>
+                        <option value="usdc">USDC</option>
+                      </select>
+                      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                        <svg className="h-4 w-4 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                          <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
+                        </svg>
+                      </div>
+                    </div>
+                  </div>
+
                   <div>
                     <label htmlFor="email" className="block text-sm font-medium text-gray-900">
                       Email
