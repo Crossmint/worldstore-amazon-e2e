@@ -72,6 +72,17 @@ export default function ProductPage() {
         }
 
         console.log('Product data:', JSON.stringify(data.product, null, 2));
+
+        // Extract price from various possible locations
+        const price = data.product.price || 
+                     data.product.extracted_price || 
+                     data.product.buybox?.price?.value || 
+                     data.product.buybox?.price?.raw;
+
+        if (!price || price === 'Price not available' || price === 'N/A') {
+          throw new Error('Price not available for this product');
+        }
+
         setProduct(data.product);
         
         // Set up images array
