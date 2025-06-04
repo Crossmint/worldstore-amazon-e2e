@@ -24,11 +24,18 @@ export default function Home() {
     setHasSearched(true);
 
     try {
-      const isAsinSearch = /^[A-Z0-9]{10}$/.test(searchQuery.toUpperCase());
+      // Extract ASIN from URL if present
+      let asin = searchQuery.trim();
+      const amazonUrlMatch = searchQuery.match(/amazon\.com\/[^\/]+\/([A-Z0-9]{10})(?:\/|\?|$)/i);
+      if (amazonUrlMatch) {
+        asin = amazonUrlMatch[1].toUpperCase();
+      }
+
+      const isAsinSearch = /^[A-Z0-9]{10}$/.test(asin);
       const requestBody = {
         engine: "amazon_product",
         amazon_domain: "amazon.com",
-        ...(isAsinSearch ? { asin: searchQuery.toUpperCase() } : { q: searchQuery })
+        ...(isAsinSearch ? { asin } : { q: searchQuery })
       };
 
       console.log('Search request body:', requestBody);
