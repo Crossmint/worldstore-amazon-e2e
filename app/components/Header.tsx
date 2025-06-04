@@ -10,7 +10,14 @@ import { useBalanceContext } from '../contexts/BalanceContext';
 export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const { address: walletAddress } = useAccount();
-  const { formattedBalances } = useBalanceContext();
+  const { formattedBalances, balances } = useBalanceContext();
+
+  const getFormattedBalance = () => {
+    const balance = balances?.find(b => b.token === 'credit');
+    if (!balance) return '0';
+    const value = balance.balances.total;
+    return Number(value).toFixed(2);
+  };
 
   return (
     <header className="bg-white shadow-sm">
@@ -53,7 +60,7 @@ export function Header() {
 
         {walletAddress && (
           <div className="text-sm text-gray-600">
-            Balance: {formattedBalances.credit?.total || '0'} CREDITS
+            Balance: {getFormattedBalance()} CREDITS
           </div>
         )}
       </div>
