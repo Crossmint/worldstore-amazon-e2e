@@ -76,7 +76,7 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
   const [retryCount, setRetryCount] = useState(0);
   const MAX_RETRIES = 1;
   const [refreshingQuote, setRefreshingQuote] = useState(false);
-  const [selectedCurrency, setSelectedCurrency] = useState<Currency>('credit');
+  const [selectedCurrency, setSelectedCurrency] = useState<Currency>('usdc');
   const [refreshingBalance, setRefreshingBalance] = useState(false);
 
   // Get chain name from chainId
