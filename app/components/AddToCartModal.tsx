@@ -107,7 +107,10 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
 
   // Get formatted balance for selected currency and chain
   const getFormattedBalance = () => {
-    return formattedBalances[selectedCurrency]?.[currentChainName] || '0';
+    const balance = formattedBalances[selectedCurrency]?.[currentChainName];
+    if (!balance) return '0';
+    // Convert to number and format to 2 decimal places
+    return Number(balance).toFixed(2);
   };
 
   // Convert decimal amount to proper decimal places for comparison
