@@ -59,6 +59,18 @@ export default function ProductPage() {
           throw new Error('Product not found');
         }
 
+        // Check if product is Amazon Fresh or Whole Foods
+        if (data.product.is_amazon_fresh === true || data.product.buybox?.is_amazon_fresh === true) {
+          throw new Error('Amazon Fresh products are not supported');
+        }
+        if (data.product.is_whole_foods_market === true || data.product.buybox?.is_whole_foods_market === true) {
+          throw new Error('Whole Foods Market products are not supported');
+        }
+        const unit = data.product.price_per?.unit?.toLowerCase();
+        if (unit && ['ounce', 'lb', 'gram'].includes(unit)) {
+          throw new Error('Products with per-unit pricing are not supported');
+        }
+
         console.log('Product data:', JSON.stringify(data.product, null, 2));
         setProduct(data.product);
         
@@ -103,6 +115,10 @@ export default function ProductPage() {
             ...variant,
             selected: false,
             displayPrice: variant.buybox?.price?.value || variant.price?.value || variant.price,
+            formattedPrice: (() => {
+              const price = variant.buybox?.price?.value || variant.price?.value || variant.price;
+              return typeof price === 'string' ? price : `$${price.toFixed(2)}`;
+            })(),
             displayTitle: variant.title || variant.name || 'Option'
           }));
           console.log('Processed variants:', JSON.stringify(processedVariants, null, 2));
