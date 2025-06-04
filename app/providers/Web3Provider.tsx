@@ -6,26 +6,15 @@ import {
   RainbowKitProvider,
 } from '@rainbow-me/rainbowkit';
 import { WagmiProvider } from 'wagmi';
-import {
-  mainnet,
-  polygon,
-  optimism,
-  arbitrum,
-  base,
-  sepolia,
-} from 'wagmi/chains';
-import {
-  QueryClientProvider,
-  QueryClient,
-} from "@tanstack/react-query";
+import { QueryClientProvider, QueryClient } from "@tanstack/react-query";
 import { WALLET_CONFIG } from '../config/wallet';
-import { BalanceProvider } from '../contexts/BalanceContext';
+import { SUPPORTED_CHAINS } from '../config/chains';
 
 const config = getDefaultConfig({
   appName: WALLET_CONFIG.appName,
   projectId: WALLET_CONFIG.projectId,
-  chains: [sepolia],
-  ssr: true, // Required for Next.js
+  chains: SUPPORTED_CHAINS,
+  ssr: true,
 });
 
 const queryClient = new QueryClient();
@@ -35,9 +24,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
         <RainbowKitProvider>
-          <BalanceProvider>
-            {children}
-          </BalanceProvider>
+          {children}
         </RainbowKitProvider>
       </QueryClientProvider>
     </WagmiProvider>

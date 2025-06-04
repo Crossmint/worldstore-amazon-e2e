@@ -6,6 +6,7 @@ import { WalletConnect } from './WalletConnect';
 import { useAccount, useWalletClient, useSignMessage, useSendTransaction } from 'wagmi';
 import { parseTransaction } from 'viem';
 import { useBalanceContext } from '../contexts/BalanceContext';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
 
 interface AddToCartModalProps {
   isOpen: boolean;
@@ -584,7 +585,11 @@ export default function AddToCartModal({ isOpen, onClose, product }: AddToCartMo
               <div className="bg-gray-50 p-4 rounded-lg">
                 <h4 className="font-medium text-gray-900 mb-2">Connect Wallet</h4>
                 <p className="text-sm text-gray-600 mb-4">Connect your wallet to proceed with checkout</p>
-                <WalletConnect />
+                <div className="flex flex-col space-y-4 [&>div]:!flex [&>div]:!flex-col [&>div]:!space-y-4 [&>div>div]:!flex [&>div>div]:!flex-col [&>div>div]:!space-y-4">
+                  <div className="w-full">
+                    <ConnectButton />
+                  </div>
+                </div>
                 {walletAddress && (
                   <div className="mt-4 pt-4 border-t border-gray-200">
                     <div className="flex items-center justify-between">
@@ -735,7 +740,6 @@ export default function AddToCartModal({ isOpen, onClose, product }: AddToCartMo
         >
           <X className="h-6 w-6" />
         </button>
-
         {renderContent()}
       </div>
     </div>

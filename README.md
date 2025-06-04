@@ -1,6 +1,6 @@
-# WorldStore
+# Crossmint Checkout
 
-WorldStore is a modern e-commerce platform that allows users to search and purchase Amazon products using cryptocurrency. Built with Next.js, TailwindCSS, and Web3 technologies.
+Crossmint Checkout is a modern e-commerce platform that allows users to search and purchase Amazon products using cryptocurrency. Built with Next.js, TailwindCSS, and Web3 technologies.
 
 ## Features
 
@@ -21,10 +21,11 @@ WorldStore is a modern e-commerce platform that allows users to search and purch
 
 ## Getting Started
 
-1. Clone the repository:
+First, clone the repository:
+
 ```bash
-git clone https://github.com/yourusername/worldstore.git
-cd worldstore
+git clone https://github.com/yourusername/crossmint-checkout.git
+cd crossmint-checkout
 ```
 
 2. Install dependencies:
@@ -40,9 +41,21 @@ SEARCH_API_KEY=your_searchapi_key
 # Crossmint credentials
 CROSSMINT_API_KEY=your_crossmint_key
 
-# Optional: Environment
+# Environment (must be either "production" or "staging")
+NEXT_PUBLIC_CROSSMINT_ENV=staging
+
+# Optional: Node environment
 NODE_ENV=development
 ```
+
+### Environment Configuration
+
+The `NEXT_PUBLIC_CROSSMINT_ENV` environment variable determines which Crossmint environment to use:
+
+- `production`: Uses `https://www.crossmint.com` as the base URL
+- `staging`: Uses `https://staging.crossmint.com` as the base URL
+
+If this variable is not set or has an invalid value, the application will throw an error on startup.
 
 ### Getting API Keys
 
@@ -108,7 +121,7 @@ The project is optimized for Vercel deployment and includes all necessary config
 ## Project Structure
 
 ```
-worldstore/
+checkout/
 ├── app/                    # Next.js app directory
 │   ├── api/               # API routes
 │   ├── components/        # React components
@@ -121,8 +134,12 @@ worldstore/
 
 ## API Routes
 
-- `/api/worldstore/search` - Search Amazon products
-- `/api/worldstore/crossmint` - Handle crypto payments
+The following API routes are available:
+
+- `/api/checkout/search` - Search Amazon products
+- `/api/checkout/crossmint` - Handle crypto payments
+- `/api/checkout/faucet` - Request test credits
+- `/api/checkout/faucet/status` - Check faucet request status
 
 ## Technologies Used
 
@@ -151,4 +168,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## Support
 
-For support, email support@worldstore.com or open an issue in the GitHub repository. 
+For support, email support@crossmint.com or open an issue in the GitHub repository. 
