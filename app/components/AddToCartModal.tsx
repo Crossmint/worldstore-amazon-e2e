@@ -110,15 +110,18 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
     const balance = balances?.find(b => b.token === selectedCurrency);
     if (!balance) return '0';
     const value = balance.balances[currentChainName] || '0';
-    return Number(value).toFixed(2);
+    // Convert to number and divide by 10^decimals
+    const decimalValue = Number(value) / Math.pow(10, balance.decimals);
+    return decimalValue.toFixed(2);
   };
 
   // Convert decimal amount to proper decimal places for comparison
   const convertToRawAmount = (amount: string | number) => {
-    const decimals = balances.find(b => b.token === selectedCurrency)?.decimals || 6;
+    const balance = balances.find(b => b.token === selectedCurrency);
+    if (!balance) return '0';
     const amountStr = amount.toString();
     const [whole, fraction = ''] = amountStr.split('.');
-    const paddedFraction = fraction.padEnd(decimals, '0');
+    const paddedFraction = fraction.padEnd(balance.decimals, '0');
     return `${whole}${paddedFraction}`;
   };
 
@@ -635,7 +638,7 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
                   <p className="text-sm text-gray-500">{product.variant}</p>
                 )}
                 <p className="text-lg font-medium text-gray-900 mt-1">
-                  ${typeof product.price === 'string' ? product.price : product.price.toFixed(2)} (+ fees)
+                  ${product.price ? (typeof product.price === 'string' ? product.price : product.price.toFixed(2)) : '0.00'} (+ fees)
                 </p>
               </div>
             </div>
@@ -799,7 +802,7 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
                   <p className="text-sm text-gray-500">{product.variant}</p>
                 )}
                 <p className="text-lg font-medium text-gray-900 mt-1">
-                  ${typeof product.price === 'string' ? product.price : product.price.toFixed(2)} (+ fees)
+                  ${product.price ? (typeof product.price === 'string' ? product.price : product.price.toFixed(2)) : '0.00'} (+ fees)
                 </p>
               </div>
             </div>
