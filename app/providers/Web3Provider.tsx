@@ -8,11 +8,9 @@ import {
 import { WagmiProvider } from 'wagmi';
 import {
   mainnet,
-  polygon,
-  optimism,
-  arbitrum,
-  base,
   sepolia,
+  base,
+  baseSepolia,
 } from 'wagmi/chains';
 import {
   QueryClientProvider,
@@ -20,11 +18,17 @@ import {
 } from "@tanstack/react-query";
 import { WALLET_CONFIG } from '../config/wallet';
 import { BalanceProvider } from '../contexts/BalanceContext';
+import { CROSSMINT_CONFIG } from '../config/crossmint';
+
+// Get the correct chains based on environment
+const SUPPORTED_CHAINS = CROSSMINT_CONFIG.environment === 'production'
+  ? [mainnet, base] as const
+  : [sepolia, baseSepolia] as const;
 
 const config = getDefaultConfig({
   appName: WALLET_CONFIG.appName,
   projectId: WALLET_CONFIG.projectId,
-  chains: [sepolia],
+  chains: SUPPORTED_CHAINS,
   ssr: true, // Required for Next.js
 });
 

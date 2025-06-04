@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import https from 'https';
+import { CROSSMINT_CONFIG } from '@/app/config/crossmint';
 
 // Helper function to uppercase string values in an object
 const uppercaseObjectValues = (obj: Record<string, any>): Record<string, any> => {
@@ -20,9 +21,9 @@ export async function POST(request: Request) {
     const body = await request.json();
     console.log('Crossmint API - Request body:', JSON.stringify(body, null, 2));
 
-    const { title, price, thumbnail, asin, email, shippingAddress, walletAddress } = body;
+    const { title, price, thumbnail, asin, email, shippingAddress, walletAddress, chain, currency } = body;
 
-    if (!title || !price || !asin || !email || !shippingAddress || !walletAddress) {
+    if (!title || !price || !asin || !email || !shippingAddress || !walletAddress || !chain || !currency) {
       return NextResponse.json(
         { error: 'Missing required parameters' },
         { status: 400 }
@@ -48,7 +49,7 @@ export async function POST(request: Request) {
     });
 
     // First, search for the product in Crossmint
-    const searchResponse = await fetch('https://staging.crossmint.com/api/v1-alpha1/ws/search', {
+    const searchResponse = await fetch(`${CROSSMINT_CONFIG.baseUrl}/api/v1-alpha1/ws/search`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${API_KEY}`,
@@ -88,7 +89,7 @@ export async function POST(request: Request) {
     console.log('Found listing:', JSON.stringify(listing, null, 2));
 
     // Create crossmint checkout order
-    const orderResponse = await fetch('https://staging.crossmint.com/api/v1-alpha1/ws/orders', {
+    const orderResponse = await fetch(`${CROSSMINT_CONFIG.baseUrl}/api/v1-alpha1/ws/orders`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${API_KEY}`,
@@ -130,7 +131,7 @@ export async function POST(request: Request) {
     }
 
     // Send to Crossmint headless checkout
-    const checkoutResponse = await fetch('https://staging.crossmint.com/api/2022-06-09/orders', {
+    const checkoutResponse = await fetch(`${CROSSMINT_CONFIG.baseUrl}/api/2022-06-09/orders`, {
       method: 'POST',
       headers: {
         'X-API-KEY': API_KEY,
@@ -152,8 +153,8 @@ export async function POST(request: Request) {
         locale: "en-US",
         payment: {
           receiptEmail: uppercasedEmail,
-          method: "ethereum-sepolia",
-          currency: "credit",
+          method: chain,
+          currency: currency,
           payerAddress: walletAddress
         },
         externalOrder: orderData

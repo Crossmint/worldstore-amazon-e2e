@@ -3,9 +3,10 @@
 import { useState, useEffect } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import { WalletConnect } from './WalletConnect';
-import { useAccount, useWalletClient, useSignMessage, useSendTransaction } from 'wagmi';
+import { useAccount, useWalletClient, useSignMessage, useSendTransaction, useChainId } from 'wagmi';
 import { parseTransaction } from 'viem';
 import { useBalanceContext } from '../contexts/BalanceContext';
+import { mainnet, sepolia, base, baseSepolia } from 'wagmi/chains';
 
 interface AddToCartModalProps {
   isOpen: boolean;
@@ -43,14 +44,17 @@ interface OrderData {
   };
 }
 
+type Currency = 'credit' | 'usdc';
+
 export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpdate }: AddToCartModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { address: walletAddress } = useAccount();
+  const chainId = useChainId();
   const { data: walletClient } = useWalletClient();
   const { signMessageAsync } = useSignMessage();
   const { sendTransaction } = useSendTransaction();
-  const { balance, formattedBalance, refetchBalance } = useBalanceContext();
+  const { balances, formattedBalances, refetchBalances } = useBalanceContext();
   const [email, setEmail] = useState('');
   const [shippingAddress, setShippingAddress] = useState({
     name: '',
@@ -71,15 +75,69 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
   const [faucetTxHash, setFaucetTxHash] = useState<string>('');
   const [retryCount, setRetryCount] = useState(0);
   const MAX_RETRIES = 1;
-  const [forceUpdate, setForceUpdate] = useState(0);
   const [refreshingQuote, setRefreshingQuote] = useState(false);
+  const [selectedCurrency, setSelectedCurrency] = useState<Currency>('credit');
+  const [refreshingBalance, setRefreshingBalance] = useState(false);
 
-  // Fetch balance when modal opens
+  // Get chain name from chainId
+  const getChainName = (id: number) => {
+    switch (id) {
+      case mainnet.id:
+        return 'ethereum';
+      case sepolia.id:
+        return 'ethereum-sepolia';
+      case base.id:
+        return 'base';
+      case baseSepolia.id:
+        return 'base-sepolia';
+      default:
+        return 'ethereum-sepolia'; // Default to sepolia
+    }
+  };
+
+  // Get current chain name
+  const currentChainName = getChainName(chainId);
+
+  // Get current balance for selected currency and chain
+  const getCurrentBalance = () => {
+    const balance = balances?.find(b => b.token === selectedCurrency);
+    if (!balance) return '0';
+    return balance.balances[currentChainName] || '0';
+  };
+
+  // Get formatted balance for selected currency and chain
+  const getFormattedBalance = () => {
+    const balance = balances?.find(b => b.token === selectedCurrency);
+    if (!balance) return '0';
+    const value = balance.balances[currentChainName] || '0';
+    // Convert to number and divide by 10^decimals
+    const decimalValue = Number(value) / Math.pow(10, balance.decimals);
+    return decimalValue.toFixed(2);
+  };
+
+  // Convert decimal amount to proper decimal places for comparison
+  const convertToRawAmount = (amount: string | number) => {
+    const balance = balances.find(b => b.token === selectedCurrency);
+    if (!balance) return '0';
+    const amountStr = amount.toString();
+    const [whole, fraction = ''] = amountStr.split('.');
+    const paddedFraction = fraction.padEnd(balance.decimals, '0');
+    return `${whole}${paddedFraction}`;
+  };
+
+  // Compare raw balance values
+  const hasEnoughBalance = (requiredAmount: string | number) => {
+    const currentBalance = getCurrentBalance();
+    const rawRequiredAmount = convertToRawAmount(requiredAmount);
+    return BigInt(currentBalance) >= BigInt(rawRequiredAmount);
+  };
+
+  // Fetch balance when modal opens or when currency changes
   useEffect(() => {
     if (isOpen && walletAddress) {
-      refetchBalance();
+      refetchBalances();
     }
-  }, [isOpen, walletAddress, refetchBalance]);
+  }, [isOpen, walletAddress, selectedCurrency, refetchBalances]);
 
   const resetModal = () => {
     setLoading(false);
@@ -103,7 +161,6 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
     setFaucetMessage('');
     setFaucetTxHash('');
     setRetryCount(0);
-    setForceUpdate(0);
     setRefreshingQuote(false);
   };
 
@@ -111,16 +168,6 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
     resetModal();
     onClose();
   };
-
-  // Log balance changes
-  useEffect(() => {
-    console.log('Balance changed:', {
-      balance: balance?.toString(),
-      formattedBalance,
-      quoteAmount: quote?.totalPrice.amount,
-      forceUpdate
-    });
-  }, [balance, formattedBalance, quote, forceUpdate]);
 
   const requestFaucet = async () => {
     if (!walletAddress) return;
@@ -193,7 +240,7 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
               clearInterval(pollInterval);
               
               // Update balance
-              await refetchBalance();
+              await refetchBalances();
               
               // Only get new order if we're in review phase
               if (phase === 'review') {
@@ -209,7 +256,8 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
                       ...product,
                       email,
                       shippingAddress,
-                      walletAddress
+                      walletAddress,
+                      chain: currentChainName
                     }),
                   });
 
@@ -289,7 +337,7 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
         clearInterval(pollInterval);
       };
     }
-  }, [faucetTxHash, onBalanceUpdate, refetchBalance]);
+  }, [faucetTxHash, onBalanceUpdate, refetchBalances]);
 
   // Poll order status
   useEffect(() => {
@@ -308,7 +356,7 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
             console.log('Order completed successfully');
             clearInterval(pollInterval);
             setPhase('success');
-            await refetchBalance();
+            await refetchBalances();
           } else if (data.phase === 'failed') {
             console.log('Order failed');
             clearInterval(pollInterval);
@@ -327,13 +375,31 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
         clearInterval(pollInterval);
       };
     }
-  }, [orderId, phase, refetchBalance]);
+  }, [orderId, phase, refetchBalances]);
+
+  const handleRefreshBalance = async () => {
+    console.log('Refreshing balance...');
+    setRefreshingBalance(true);
+    try {
+      await refetchBalances();
+      console.log('Balance refreshed successfully');
+    } catch (error) {
+      console.error('Failed to refresh balance:', error);
+    } finally {
+      setRefreshingBalance(false);
+    }
+  };
 
   if (!isOpen) return null;
 
   const handleReview = async () => {
     if (!walletAddress) {
       setError('Please connect your wallet first');
+      return;
+    }
+
+    if (!chainId) {
+      setError('Please select a network first');
       return;
     }
 
@@ -352,11 +418,14 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
     setLoading(true);
 
     try {
+      const chainName = getChainName(chainId);
       console.log('Sending request to Crossmint with data:', {
         product,
         email,
         shippingAddress,
-        walletAddress
+        walletAddress,
+        chain: chainName,
+        currency: selectedCurrency
       });
 
       // Get quote first
@@ -369,7 +438,9 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
           ...product,
           email,
           shippingAddress,
-          walletAddress
+          walletAddress,
+          chain: chainName,
+          currency: selectedCurrency
         }),
       });
 
@@ -421,8 +492,8 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
       return;
     }
 
-    if (quote && balance && Number(balance) < Number(quote.totalPrice.amount)) {
-      setError(`Insufficient balance. You need ${quote.totalPrice.amount} credits.`);
+    if (quote && !hasEnoughBalance(quote.totalPrice.amount)) {
+      setError(`Insufficient balance. You need ${quote.totalPrice.amount} ${selectedCurrency.toUpperCase()}.`);
       return;
     }
 
@@ -510,10 +581,16 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
 
   // Update the faucet section in the review phase
   const renderFaucetSection = () => {
-    if (walletAddress && (formattedBalance === undefined || (quote && balance !== undefined && Number(balance) < Number(quote.totalPrice.amount)))) {
+    // Only show faucet for ethereum-sepolia and credit currency
+    if (chainId !== sepolia.id || selectedCurrency !== 'credit') {
+      return null;
+    }
+
+    const currentBalance = getCurrentBalance();
+    if (walletAddress && (formattedBalances[selectedCurrency] === undefined || (quote && !hasEnoughBalance(quote.totalPrice.amount)))) {
       return (
         <div className="mt-2">
-          {formattedBalance === undefined ? (
+          {formattedBalances[selectedCurrency] === undefined ? (
             <p className="text-gray-600 mb-2">Loading your credit balance...</p>
           ) : (
             <p className="text-red-600 mb-2">You need {quote?.totalPrice.amount} CREDITS to complete this purchase.</p>
@@ -532,19 +609,19 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
       case 'review':
         console.log('Review phase debug:', {
           walletAddress,
-          balance,
-          formattedBalance,
+          balance: getCurrentBalance(),
+          formattedBalance: getFormattedBalance(),
           quote,
-          hasBalance: !!balance,
-          hasFormattedBalance: !!formattedBalance,
+          hasBalance: !!getCurrentBalance(),
+          hasFormattedBalance: !!getFormattedBalance(),
           hasQuote: !!quote,
           quoteAmount: quote?.totalPrice.amount,
-          balanceComparison: balance && quote ? Number(balance) < Number(quote.totalPrice.amount) : null,
-          balanceValue: balance ? balance.toString() : null,
+          balanceComparison: quote ? hasEnoughBalance(quote.totalPrice.amount) : null,
+          balanceValue: getCurrentBalance(),
           quoteValue: quote?.totalPrice.amount,
-          isDisabled: loading || (quote !== null && balance !== undefined && balance !== null && Number(balance) < Number(quote.totalPrice.amount)),
+          isDisabled: loading || (quote !== null && !hasEnoughBalance(quote.totalPrice.amount)),
           buttonDisabledReason: loading ? 'loading' : 
-            (quote !== null && balance !== undefined && balance !== null && Number(balance) < Number(quote.totalPrice.amount)) ? 
+            (quote !== null && !hasEnoughBalance(quote.totalPrice.amount)) ? 
             'insufficient_balance' : 'enabled'
         });
         return (
@@ -561,7 +638,7 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
                   <p className="text-sm text-gray-500">{product.variant}</p>
                 )}
                 <p className="text-lg font-medium text-gray-900 mt-1">
-                  ${typeof product.price === 'string' ? product.price : product.price.toFixed(2)} (+ fees)
+                  ${product.price ? (typeof product.price === 'string' ? product.price : product.price.toFixed(2)) : '0.00'} (+ fees)
                 </p>
               </div>
             </div>
@@ -571,7 +648,7 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
               <div className="text-sm text-gray-600 space-y-2">
                 <div className="flex items-center justify-between">
                   <p className="text-lg font-medium">
-                    Total Price: {quote?.totalPrice.amount} credits
+                    Total Price: {quote?.totalPrice.amount} {selectedCurrency.toUpperCase()}
                   </p>
                 </div>
                 <p>Quote Valid Until: {formatDate(quote?.expiresAt || '')}</p>
@@ -579,15 +656,40 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
                   This quote is valid for 10 minutes. After that, you'll need to request a new quote.
                 </p>
                 
-                {/* Credit Balance Section */}
+                {/* Balance Section */}
                 <div className="mt-4 pt-4 border-t border-gray-200">
                   {walletAddress && (
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-gray-600">Your Credit Balance:</span>
-                      <span className="font-medium">
-                        {formattedBalance ? `${formattedBalance} CREDITS` : 'Loading...'}
-                      </span>
-                    </div>
+                    <>
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-gray-600">Your {selectedCurrency.toUpperCase()} Balance:</span>
+                        <div className="flex items-center space-x-2">
+                          <span className="font-medium">
+                            {formattedBalances[selectedCurrency] ? `${getFormattedBalance()} ${selectedCurrency.toUpperCase()}` : 'Loading...'}
+                          </span>
+                          <button
+                            onClick={handleRefreshBalance}
+                            disabled={refreshingBalance}
+                            className="p-1 text-gray-500 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-full disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Refresh balance"
+                          >
+                            {refreshingBalance ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                              </svg>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                      {quote && !hasEnoughBalance(quote.totalPrice.amount) && (
+                        <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-md">
+                          <p className="text-sm text-red-600">
+                            Insufficient balance. You need {quote.totalPrice.amount} {selectedCurrency.toUpperCase()} to complete this purchase.
+                          </p>
+                        </div>
+                      )}
+                    </>
                   )}
                   {renderFaucetSection()}
                 </div>
@@ -616,7 +718,7 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
               </button>
               <button
                 onClick={handleFinalize}
-                disabled={loading || refreshingQuote || (quote !== null && balance !== undefined && balance !== null && Number(balance) < Number(quote.totalPrice.amount))}
+                disabled={loading || refreshingQuote || (quote !== null && !hasEnoughBalance(quote.totalPrice.amount))}
                 className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-300"
               >
                 {loading ? 'Processing...' : 
@@ -700,7 +802,7 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
                   <p className="text-sm text-gray-500">{product.variant}</p>
                 )}
                 <p className="text-lg font-medium text-gray-900 mt-1">
-                  ${typeof product.price === 'string' ? product.price : product.price.toFixed(2)} (+ fees)
+                  ${product.price ? (typeof product.price === 'string' ? product.price : product.price.toFixed(2)) : '0.00'} (+ fees)
                 </p>
               </div>
             </div>
@@ -725,6 +827,28 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
 
               {walletAddress && (
                 <>
+                  <div>
+                    <label htmlFor="currency" className="block text-sm font-medium text-gray-900 mb-2">
+                      Payment Currency
+                    </label>
+                    <div className="relative">
+                      <select
+                        id="currency"
+                        value={selectedCurrency}
+                        onChange={(e) => setSelectedCurrency(e.target.value as Currency)}
+                        className="w-full appearance-none rounded-lg border-2 border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-900 shadow-sm hover:border-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                      >
+                        <option value="credit">CREDITS</option>
+                        <option value="usdc">USDC</option>
+                      </select>
+                      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                        <svg className="h-4 w-4 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                          <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
+                        </svg>
+                      </div>
+                    </div>
+                  </div>
+
                   <div>
                     <label htmlFor="email" className="block text-sm font-medium text-gray-900">
                       Email

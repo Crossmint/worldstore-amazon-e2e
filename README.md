@@ -109,7 +109,7 @@ The project is optimized for Vercel deployment and includes all necessary config
 ## Project Structure
 
 ```
-worldstore/
+checkout/
 ├── app/                    # Next.js app directory
 │   ├── api/               # API routes
 │   ├── components/        # React components
