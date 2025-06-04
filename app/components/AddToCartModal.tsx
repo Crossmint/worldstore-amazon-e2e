@@ -100,7 +100,7 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
 
   // Get current balance for selected currency and chain
   const getCurrentBalance = () => {
-    const balance = balances.find(b => b.token === selectedCurrency);
+    const balance = balances?.find(b => b.token === selectedCurrency);
     if (!balance) return '0';
     return balance.balances[currentChainName] || '0';
   };
