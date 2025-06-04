@@ -21,9 +21,9 @@ export async function POST(request: Request) {
     const body = await request.json();
     console.log('Crossmint API - Request body:', JSON.stringify(body, null, 2));
 
-    const { title, price, thumbnail, asin, email, shippingAddress, walletAddress } = body;
+    const { title, price, thumbnail, asin, email, shippingAddress, walletAddress, chain } = body;
 
-    if (!title || !price || !asin || !email || !shippingAddress || !walletAddress) {
+    if (!title || !price || !asin || !email || !shippingAddress || !walletAddress || !chain) {
       return NextResponse.json(
         { error: 'Missing required parameters' },
         { status: 400 }
@@ -153,7 +153,7 @@ export async function POST(request: Request) {
         locale: "en-US",
         payment: {
           receiptEmail: uppercasedEmail,
-          method: "ethereum-sepolia",
+          method: chain,
           currency: "credit",
           payerAddress: walletAddress
         },

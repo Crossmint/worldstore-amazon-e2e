@@ -3,9 +3,10 @@
 import { useState, useEffect } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import { WalletConnect } from './WalletConnect';
-import { useAccount, useWalletClient, useSignMessage, useSendTransaction } from 'wagmi';
+import { useAccount, useWalletClient, useSignMessage, useSendTransaction, useChainId } from 'wagmi';
 import { parseTransaction } from 'viem';
 import { useBalanceContext } from '../contexts/BalanceContext';
+import { mainnet, sepolia, base, baseSepolia } from 'wagmi/chains';
 
 interface AddToCartModalProps {
   isOpen: boolean;
@@ -47,6 +48,7 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { address: walletAddress } = useAccount();
+  const chainId = useChainId();
   const { data: walletClient } = useWalletClient();
   const { signMessageAsync } = useSignMessage();
   const { sendTransaction } = useSendTransaction();
@@ -73,6 +75,22 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
   const MAX_RETRIES = 1;
   const [forceUpdate, setForceUpdate] = useState(0);
   const [refreshingQuote, setRefreshingQuote] = useState(false);
+
+  // Get chain name from chainId
+  const getChainName = (id: number) => {
+    switch (id) {
+      case mainnet.id:
+        return 'ethereum';
+      case sepolia.id:
+        return 'ethereum-sepolia';
+      case base.id:
+        return 'base';
+      case baseSepolia.id:
+        return 'base-sepolia';
+      default:
+        return 'ethereum-sepolia'; // Default to sepolia
+    }
+  };
 
   // Fetch balance when modal opens
   useEffect(() => {
@@ -209,7 +227,8 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
                       ...product,
                       email,
                       shippingAddress,
-                      walletAddress
+                      walletAddress,
+                      chain: getChainName(chainId)
                     }),
                   });
 
@@ -337,6 +356,11 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
       return;
     }
 
+    if (!chainId) {
+      setError('Please select a network first');
+      return;
+    }
+
     if (!email) {
       setError('Please enter your email');
       return;
@@ -352,11 +376,13 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
     setLoading(true);
 
     try {
+      const chainName = getChainName(chainId);
       console.log('Sending request to Crossmint with data:', {
         product,
         email,
         shippingAddress,
-        walletAddress
+        walletAddress,
+        chain: chainName
       });
 
       // Get quote first
@@ -369,7 +395,8 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
           ...product,
           email,
           shippingAddress,
-          walletAddress
+          walletAddress,
+          chain: chainName
         }),
       });
 
