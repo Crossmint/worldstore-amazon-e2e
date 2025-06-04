@@ -6,8 +6,8 @@ import { Providers } from './providers/Providers';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'WorldStore',
-  description: 'Buy products with crypto',
+  title: 'Crossmint Checkout',
+  description: 'Shop Amazon products with cryptocurrency',
 };
 
 export default function RootLayout({

@@ -87,7 +87,7 @@ export async function POST(request: Request) {
     const listing = searchData[0].listing;
     console.log('Found listing:', JSON.stringify(listing, null, 2));
 
-    // Create WorldStore order
+    // Create crossmint checkout order
     const orderResponse = await fetch('https://staging.crossmint.com/api/v1-alpha1/ws/orders', {
       method: 'POST',
       headers: {
@@ -118,9 +118,9 @@ export async function POST(request: Request) {
       agent
     });
 
-    console.log('WorldStore Order API - Response status:', orderResponse.status);
+    console.log('Checkout Order API - Response status:', orderResponse.status);
     const orderData = await orderResponse.json();
-    console.log('WorldStore Order API - Response:', JSON.stringify(orderData, null, 2));
+    console.log('Checkout Order API - Response:', JSON.stringify(orderData, null, 2));
 
     if (!orderResponse.ok) {
       return NextResponse.json(
@@ -162,9 +162,9 @@ export async function POST(request: Request) {
       agent
     });
 
-    console.log('Crossmint Checkout API - Response status:', checkoutResponse.status);
+    console.log('Crossmint Checkout Order API - Response status:', checkoutResponse.status);
     const checkoutData = await checkoutResponse.json();
-    console.log('Crossmint Checkout API - Response:', JSON.stringify(checkoutData, null, 2));
+    console.log('Crossmint Checkout Order API - Response:', JSON.stringify(checkoutData, null, 2));
 
     if (!checkoutResponse.ok) {
       return NextResponse.json(

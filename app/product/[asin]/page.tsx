@@ -25,7 +25,7 @@ export default function ProductPage() {
     const fetchProduct = async () => {
       try {
         console.log('Fetching product for ASIN:', params.asin);
-        const response = await fetch('/api/worldstore/search', {
+        const response = await fetch('/api/checkout/search', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

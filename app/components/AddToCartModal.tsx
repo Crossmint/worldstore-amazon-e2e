@@ -129,7 +129,7 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
     setFaucetMessage('Requesting credits...');
 
     try {
-      const response = await fetch('/api/worldstore/faucet', {
+      const response = await fetch('/api/checkout/faucet', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -169,12 +169,16 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
   // Poll faucet status
   useEffect(() => {
     if (faucetTxHash) {
+      console.log('Starting faucet status polling for txHash:', faucetTxHash);
       const pollInterval = setInterval(async () => {
         try {
-          const response = await fetch(`/api/worldstore/faucet/status?txHash=${faucetTxHash}`);
+          console.log('Polling faucet status for txHash:', faucetTxHash);
+          const response = await fetch(`/api/checkout/faucet/status?txHash=${faucetTxHash}`);
           const data = await response.json();
+          console.log('Faucet status response:', data);
           
           if (data.error) {
+            console.error('Faucet status error:', data.error);
             setFaucetStatus('error');
             setFaucetMessage(data.message || 'Failed to get credits');
             clearInterval(pollInterval);
@@ -183,6 +187,7 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
 
           switch (data.status) {
             case 'success':
+              console.log('Faucet transaction successful');
               setFaucetStatus('success');
               setFaucetMessage('Credits received!');
               clearInterval(pollInterval);
@@ -193,8 +198,9 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
               // Only get new order if we're in review phase
               if (phase === 'review') {
                 try {
+                  console.log('Refreshing order after successful faucet transaction');
                   setRefreshingQuote(true);
-                  const response = await fetch('/api/worldstore/crossmint', {
+                  const response = await fetch('/api/checkout/crossmint', {
                     method: 'POST',
                     headers: {
                       'Content-Type': 'application/json',
@@ -208,6 +214,7 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
                   });
 
                   const data = await response.json();
+                  console.log('New order response after faucet:', data);
 
                   if (!response.ok || !data.order?.payment?.preparation?.serializedTransaction) {
                     throw new Error('Failed to get new order');
@@ -256,15 +263,17 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
               }
               break;
             case 'failed':
+              console.log('Faucet transaction failed');
               setFaucetStatus('error');
               setFaucetMessage('Transaction failed');
               clearInterval(pollInterval);
               break;
             case 'pending':
+              console.log('Faucet transaction still pending...');
               setFaucetMessage('Transaction pending...');
               break;
             default:
-              console.warn('Unknown status:', data.status);
+              console.warn('Unknown faucet status:', data.status);
               break;
           }
         } catch (error) {
@@ -275,7 +284,10 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
         }
       }, 2000);
 
-      return () => clearInterval(pollInterval);
+      return () => {
+        console.log('Cleaning up faucet status polling');
+        clearInterval(pollInterval);
+      };
     }
   }, [faucetTxHash, onBalanceUpdate, refetchBalance]);
 
@@ -284,32 +296,37 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
     let pollInterval: NodeJS.Timeout;
 
     if (orderId && phase === 'processing') {
-      console.log('Polling order:', orderId);
+      console.log('Starting order status polling for orderId:', orderId);
       pollInterval = setInterval(async () => {
         try {
-          const response = await fetch(`/api/worldstore/crossmint/status?orderId=${orderId}`);
+          console.log('Polling order status for orderId:', orderId);
+          const response = await fetch(`/api/checkout/crossmint/status?orderId=${orderId}`);
           const data = await response.json();
+          console.log('Order status response:', data);
 
           if (data.phase === 'completed') {
+            console.log('Order completed successfully');
             clearInterval(pollInterval);
             setPhase('success');
             await refetchBalance();
           } else if (data.phase === 'failed') {
+            console.log('Order failed');
             clearInterval(pollInterval);
             setPhase('error');
             setError('Order failed to process');
+          } else {
+            console.log('Order still processing, current phase:', data.phase);
           }
         } catch (err) {
           console.error('Error polling order status:', err);
         }
       }, 1000);
-    }
 
-    return () => {
-      if (pollInterval) {
+      return () => {
+        console.log('Cleaning up order status polling');
         clearInterval(pollInterval);
-      }
-    };
+      };
+    }
   }, [orderId, phase, refetchBalance]);
 
   if (!isOpen) return null;
@@ -343,7 +360,7 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
       });
 
       // Get quote first
-      const response = await fetch('/api/worldstore/crossmint', {
+      const response = await fetch('/api/checkout/crossmint', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

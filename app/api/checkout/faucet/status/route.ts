@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-const FAUCET_API_URL = 'https://worldstore-credit-faucet.vercel.app/api/faucet/status';
+const FAUCET_API_URL = 'https://checkout-credit-faucet-crossmint.vercel.app/api/faucet/status';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
