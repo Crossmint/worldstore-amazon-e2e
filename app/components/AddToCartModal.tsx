@@ -54,7 +54,7 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
   const { data: walletClient } = useWalletClient();
   const { signMessageAsync } = useSignMessage();
   const { sendTransaction } = useSendTransaction();
-  const { balance, formattedBalance, refetchBalance } = useBalanceContext();
+  const { balances, formattedBalances, refetchBalances } = useBalanceContext();
   const [email, setEmail] = useState('');
   const [shippingAddress, setShippingAddress] = useState({
     name: '',
@@ -75,9 +75,9 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
   const [faucetTxHash, setFaucetTxHash] = useState<string>('');
   const [retryCount, setRetryCount] = useState(0);
   const MAX_RETRIES = 1;
-  const [forceUpdate, setForceUpdate] = useState(0);
   const [refreshingQuote, setRefreshingQuote] = useState(false);
   const [selectedCurrency, setSelectedCurrency] = useState<Currency>('credit');
+  const [refreshingBalance, setRefreshingBalance] = useState(false);
 
   // Get chain name from chainId
   const getChainName = (id: number) => {
@@ -95,12 +95,43 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
     }
   };
 
-  // Fetch balance when modal opens
+  // Get current chain name
+  const currentChainName = getChainName(chainId);
+
+  // Get current balance for selected currency and chain
+  const getCurrentBalance = () => {
+    const balance = balances.find(b => b.token === selectedCurrency);
+    if (!balance) return '0';
+    return balance.balances[currentChainName] || '0';
+  };
+
+  // Get formatted balance for selected currency and chain
+  const getFormattedBalance = () => {
+    return formattedBalances[selectedCurrency]?.[currentChainName] || '0';
+  };
+
+  // Convert decimal amount to proper decimal places for comparison
+  const convertToRawAmount = (amount: string | number) => {
+    const decimals = balances.find(b => b.token === selectedCurrency)?.decimals || 6;
+    const amountStr = amount.toString();
+    const [whole, fraction = ''] = amountStr.split('.');
+    const paddedFraction = fraction.padEnd(decimals, '0');
+    return `${whole}${paddedFraction}`;
+  };
+
+  // Compare raw balance values
+  const hasEnoughBalance = (requiredAmount: string | number) => {
+    const currentBalance = getCurrentBalance();
+    const rawRequiredAmount = convertToRawAmount(requiredAmount);
+    return BigInt(currentBalance) >= BigInt(rawRequiredAmount);
+  };
+
+  // Fetch balance when modal opens or when currency changes
   useEffect(() => {
     if (isOpen && walletAddress) {
-      refetchBalance();
+      refetchBalances();
     }
-  }, [isOpen, walletAddress, refetchBalance]);
+  }, [isOpen, walletAddress, selectedCurrency, refetchBalances]);
 
   const resetModal = () => {
     setLoading(false);
@@ -124,7 +155,6 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
     setFaucetMessage('');
     setFaucetTxHash('');
     setRetryCount(0);
-    setForceUpdate(0);
     setRefreshingQuote(false);
   };
 
@@ -132,16 +162,6 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
     resetModal();
     onClose();
   };
-
-  // Log balance changes
-  useEffect(() => {
-    console.log('Balance changed:', {
-      balance: balance?.toString(),
-      formattedBalance,
-      quoteAmount: quote?.totalPrice.amount,
-      forceUpdate
-    });
-  }, [balance, formattedBalance, quote, forceUpdate]);
 
   const requestFaucet = async () => {
     if (!walletAddress) return;
@@ -214,7 +234,7 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
               clearInterval(pollInterval);
               
               // Update balance
-              await refetchBalance();
+              await refetchBalances();
               
               // Only get new order if we're in review phase
               if (phase === 'review') {
@@ -231,7 +251,7 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
                       email,
                       shippingAddress,
                       walletAddress,
-                      chain: getChainName(chainId)
+                      chain: currentChainName
                     }),
                   });
 
@@ -311,7 +331,7 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
         clearInterval(pollInterval);
       };
     }
-  }, [faucetTxHash, onBalanceUpdate, refetchBalance]);
+  }, [faucetTxHash, onBalanceUpdate, refetchBalances]);
 
   // Poll order status
   useEffect(() => {
@@ -330,7 +350,7 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
             console.log('Order completed successfully');
             clearInterval(pollInterval);
             setPhase('success');
-            await refetchBalance();
+            await refetchBalances();
           } else if (data.phase === 'failed') {
             console.log('Order failed');
             clearInterval(pollInterval);
@@ -349,7 +369,20 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
         clearInterval(pollInterval);
       };
     }
-  }, [orderId, phase, refetchBalance]);
+  }, [orderId, phase, refetchBalances]);
+
+  const handleRefreshBalance = async () => {
+    console.log('Refreshing balance...');
+    setRefreshingBalance(true);
+    try {
+      await refetchBalances();
+      console.log('Balance refreshed successfully');
+    } catch (error) {
+      console.error('Failed to refresh balance:', error);
+    } finally {
+      setRefreshingBalance(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -453,8 +486,8 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
       return;
     }
 
-    if (quote && balance && Number(balance) < Number(quote.totalPrice.amount)) {
-      setError(`Insufficient balance. You need ${quote.totalPrice.amount} credits.`);
+    if (quote && !hasEnoughBalance(quote.totalPrice.amount)) {
+      setError(`Insufficient balance. You need ${quote.totalPrice.amount} ${selectedCurrency.toUpperCase()}.`);
       return;
     }
 
@@ -542,15 +575,16 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
 
   // Update the faucet section in the review phase
   const renderFaucetSection = () => {
-    // Only show faucet for ethereum-sepolia
-    if (chainId !== sepolia.id) {
+    // Only show faucet for ethereum-sepolia and credit currency
+    if (chainId !== sepolia.id || selectedCurrency !== 'credit') {
       return null;
     }
 
-    if (walletAddress && selectedCurrency === 'credit' && (formattedBalance === undefined || (quote && balance !== undefined && Number(balance) < Number(quote.totalPrice.amount)))) {
+    const currentBalance = getCurrentBalance();
+    if (walletAddress && (formattedBalances[selectedCurrency] === undefined || (quote && !hasEnoughBalance(quote.totalPrice.amount)))) {
       return (
         <div className="mt-2">
-          {formattedBalance === undefined ? (
+          {formattedBalances[selectedCurrency] === undefined ? (
             <p className="text-gray-600 mb-2">Loading your credit balance...</p>
           ) : (
             <p className="text-red-600 mb-2">You need {quote?.totalPrice.amount} CREDITS to complete this purchase.</p>
@@ -569,19 +603,19 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
       case 'review':
         console.log('Review phase debug:', {
           walletAddress,
-          balance,
-          formattedBalance,
+          balance: getCurrentBalance(),
+          formattedBalance: getFormattedBalance(),
           quote,
-          hasBalance: !!balance,
-          hasFormattedBalance: !!formattedBalance,
+          hasBalance: !!getCurrentBalance(),
+          hasFormattedBalance: !!getFormattedBalance(),
           hasQuote: !!quote,
           quoteAmount: quote?.totalPrice.amount,
-          balanceComparison: balance && quote ? Number(balance) < Number(quote.totalPrice.amount) : null,
-          balanceValue: balance ? balance.toString() : null,
+          balanceComparison: quote ? hasEnoughBalance(quote.totalPrice.amount) : null,
+          balanceValue: getCurrentBalance(),
           quoteValue: quote?.totalPrice.amount,
-          isDisabled: loading || (quote !== null && balance !== undefined && balance !== null && Number(balance) < Number(quote.totalPrice.amount)),
+          isDisabled: loading || (quote !== null && !hasEnoughBalance(quote.totalPrice.amount)),
           buttonDisabledReason: loading ? 'loading' : 
-            (quote !== null && balance !== undefined && balance !== null && Number(balance) < Number(quote.totalPrice.amount)) ? 
+            (quote !== null && !hasEnoughBalance(quote.totalPrice.amount)) ? 
             'insufficient_balance' : 'enabled'
         });
         return (
@@ -616,15 +650,40 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
                   This quote is valid for 10 minutes. After that, you'll need to request a new quote.
                 </p>
                 
-                {/* Credit Balance Section */}
+                {/* Balance Section */}
                 <div className="mt-4 pt-4 border-t border-gray-200">
-                  {walletAddress && selectedCurrency === 'credit' && (
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-gray-600">Your Credit Balance:</span>
-                      <span className="font-medium">
-                        {formattedBalance ? `${formattedBalance} CREDITS` : 'Loading...'}
-                      </span>
-                    </div>
+                  {walletAddress && (
+                    <>
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-gray-600">Your {selectedCurrency.toUpperCase()} Balance:</span>
+                        <div className="flex items-center space-x-2">
+                          <span className="font-medium">
+                            {formattedBalances[selectedCurrency] ? `${getFormattedBalance()} ${selectedCurrency.toUpperCase()}` : 'Loading...'}
+                          </span>
+                          <button
+                            onClick={handleRefreshBalance}
+                            disabled={refreshingBalance}
+                            className="p-1 text-gray-500 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-full disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Refresh balance"
+                          >
+                            {refreshingBalance ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                              </svg>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                      {quote && !hasEnoughBalance(quote.totalPrice.amount) && (
+                        <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-md">
+                          <p className="text-sm text-red-600">
+                            Insufficient balance. You need {quote.totalPrice.amount} {selectedCurrency.toUpperCase()} to complete this purchase.
+                          </p>
+                        </div>
+                      )}
+                    </>
                   )}
                   {renderFaucetSection()}
                 </div>
@@ -653,7 +712,7 @@ export default function AddToCartModal({ isOpen, onClose, product, onBalanceUpda
               </button>
               <button
                 onClick={handleFinalize}
-                disabled={loading || refreshingQuote || (quote !== null && balance !== undefined && balance !== null && Number(balance) < Number(quote.totalPrice.amount))}
+                disabled={loading || refreshingQuote || (quote !== null && !hasEnoughBalance(quote.totalPrice.amount))}
                 className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-300"
               >
                 {loading ? 'Processing...' : 
