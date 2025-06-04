@@ -33,7 +33,7 @@ export default function Home() {
 
       console.log('Search request body:', requestBody);
 
-      const response = await fetch('/api/worldstore/search', {
+      const response = await fetch('/api/checkout/search', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -88,7 +88,7 @@ export default function Home() {
               <div className="sm:text-center lg:text-left">
                 <h1 className="text-3xl tracking-tight font-extrabold text-gray-900 sm:text-4xl md:text-5xl lg:text-6xl">
                   <span className="block">Shop the future with</span>
-                  <span className="block text-indigo-600">Worldstore</span>
+                  <span className="block text-indigo-600">Crossmint Checkout</span>
                 </h1>
                 <p className="mt-3 text-base text-gray-500 sm:mt-5 sm:text-lg sm:max-w-xl sm:mx-auto md:mt-5 md:text-xl lg:mx-0">
                   Discover and purchase products using cryptocurrency. Experience seamless shopping with instant crypto payments.

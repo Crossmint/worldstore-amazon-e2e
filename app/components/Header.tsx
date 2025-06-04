@@ -16,7 +16,7 @@ export function Header() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           <div className="flex-shrink-0">
-            <h1 className="text-xl font-bold text-indigo-600">WorldStore</h1>
+            <h1 className="text-xl font-bold text-indigo-600">Crossmint Checkout</h1>
           </div>
           
           {/* Mobile menu button */}
