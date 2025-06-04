@@ -64,11 +64,40 @@ export default function Home() {
         }
       } else {
         // For keyword search, we get an array of products in organic_results
-        // Filter out products without valid prices
+        // Filter out products without valid prices, Amazon Fresh, Whole Foods, and per-unit pricing
+        console.log('Raw search results:', data.organic_results);
+        
         const validProducts = (data.organic_results || []).filter((product: any) => {
           const price = product.price || product.extracted_price || product.buybox?.price?.value;
-          return price && price !== 'Price not available' && price !== 'N/A';
+          const isAmazonFresh = product.is_amazon_fresh === true || product.buybox?.is_amazon_fresh === true;
+          const isWholeFoods = product.is_whole_foods_market === true || product.buybox?.is_whole_foods_market === true;
+          const unit = product.price_per?.unit?.toLowerCase();
+          const hasPerUnitPricing = unit && ['ounce', 'lb', 'gram'].includes(unit);
+          
+          console.log('Product filtering:', {
+            title: product.title,
+            isAmazonFresh,
+            isWholeFoods,
+            hasPerUnitPricing,
+            price,
+            rawWholeFoods: product.is_whole_foods_market,
+            rawBuyboxWholeFoods: product.buybox?.is_whole_foods_market,
+            rawProduct: product
+          });
+          
+          const isValid = price && 
+                 price !== 'Price not available' && 
+                 price !== 'N/A' && 
+                 !isAmazonFresh &&
+                 !isWholeFoods &&
+                 !hasPerUnitPricing;
+          
+          console.log('Is valid product:', isValid);
+          
+          return isValid;
         });
+        
+        console.log('Filtered results:', validProducts);
         setResults(validProducts);
       }
     } catch (err) {
@@ -147,7 +176,8 @@ export default function Home() {
             {results.map((product, index) => {
               const productTitle = product.title || 'No title available';
               const productImageUrl = product.thumbnail || product.main_image || '/placeholder.png';
-              const productPrice = product.price || product.extracted_price || 'Price not available';
+              const productPrice = product.price || product.extracted_price || product.buybox?.price?.value || 'Price not available';
+              const formattedPrice = typeof productPrice === 'string' ? productPrice : `$${productPrice.toFixed(2)}`;
               const productAsin = product.asin;
               const position = product.position || index;
 
@@ -177,7 +207,7 @@ export default function Home() {
                         {productTitle}
                       </h3>
                       <p className="text-lg sm:text-xl font-bold text-blue-600 mt-auto">
-                        {typeof productPrice === 'string' ? productPrice : `$${productPrice}`}
+                        {formattedPrice}
                       </p>
                       {product.rating && (
                         <div className="flex items-center mt-2">
